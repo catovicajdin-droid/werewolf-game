@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Werewolf: Advanced</title>
+  <title>Werewolf</title>
   <style>
     :root {
       --bg: #0b0f19;
@@ -37,6 +37,35 @@
 
     h1, h2, h3 { margin-bottom: 1rem; text-align: center; }
 
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      background: var(--surface);
+      padding: 0.25rem;
+      border-radius: 10px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 0.6rem;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+
+    .tab-btn.active {
+      background: var(--surface-2);
+      color: var(--text);
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
     .card {
       background: var(--surface);
       border-radius: 12px;
@@ -53,6 +82,31 @@
       background: var(--surface-2);
       color: var(--text);
       margin-bottom: 0.5rem;
+    }
+
+    .toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--surface-2);
+    }
+
+    .toggle-row:last-child { border-bottom: none; }
+
+    .toggle-row label {
+      cursor: pointer;
+      font-size: 0.95rem;
+      flex: 1;
+      padding-right: 1rem;
+    }
+
+    .toggle-row input[type="checkbox"] {
+      width: 1.3rem;
+      height: 1.3rem;
+      accent-color: var(--accent-2);
+      cursor: pointer;
+      margin: 0;
     }
 
     button {
@@ -83,6 +137,7 @@
       font-size: 0.75rem;
       font-weight: 700;
       text-transform: uppercase;
+      letter-spacing: 0.03em;
     }
 
     .role-werewolf { background: var(--accent); color: #fff; }
@@ -103,13 +158,13 @@
 
     .center { text-align: center; }
     .big { font-size: 1.25rem; margin: 1rem 0; }
-    .muted { color: var(--muted); }
+    .muted { color: var(--muted); font-size: 0.85rem; }
 
     .log {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-family: ui-monospace, monospace;
       font-size: 0.875rem;
       color: var(--muted);
-      max-height: 220px;
+      max-height: 180px;
       overflow-y: auto;
       white-space: pre-wrap;
     }
@@ -120,11 +175,7 @@
       gap: 0.5rem;
     }
 
-    .role-reveal-btn {
-      min-height: 4rem;
-      font-size: 1.1rem;
-    }
-
+    .role-reveal-btn { min-height: 4rem; font-size: 1.1rem; }
     .role-reveal-btn.revealed.role-werewolf { background: var(--accent); }
     .role-reveal-btn.revealed.role-seer { background: var(--purple); }
     .role-reveal-btn.revealed.role-doctor { background: var(--safe); color: #000; }
@@ -139,58 +190,92 @@
       font-size: 2rem;
       font-weight: 700;
       margin: 0.5rem 0;
+      color: var(--warn);
     }
   </style>
 </head>
 <body>
   <div id="setup" class="screen active">
-    <h1>Werewolf: Advanced</h1>
+    <h1>Werewolf</h1>
 
-    <div class="card">
-      <h3>Players</h3>
-      <input type="text" id="playerName" placeholder="Player name" maxlength="20" autocomplete="off">
-      <button id="addPlayerBtn">Add Player</button>
-      <ul id="playersList" class="player-list"></ul>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="tab-players">Players</button>
+      <button class="tab-btn" data-tab="tab-roles">Roles & Modes</button>
+      <button class="tab-btn" data-tab="tab-settings">Settings</button>
     </div>
 
-    <div class="card">
-      <h3>Roles</h3>
-      <div class="grid-2">
-        <div>
-          <label class="muted">Werewolves</label>
-          <input type="number" id="werewolfCount" value="2" min="1">
-        </div>
-        <div>
-          <label class="muted">Seers</label>
-          <input type="number" id="seerCount" value="1" min="0">
-        </div>
-        <div>
-          <label class="muted">Doctors</label>
-          <input type="number" id="doctorCount" value="1" min="0">
-        </div>
-        <div>
-          <label class="muted">Witches</label>
-          <input type="number" id="witchCount" value="1" min="0">
-        </div>
-        <div>
-          <label class="muted">Hunters</label>
-          <input type="number" id="hunterCount" value="1" min="0">
-        </div>
-        <div>
-          <label class="muted">Cupids</label>
-          <input type="number" id="cupidCount" value="0" min="0">
-        </div>
-        <div>
-          <label class="muted">Bodyguards</label>
-          <input type="number" id="bodyguardCount" value="0" min="0">
-        </div>
+    <!-- PLAYERS TAB -->
+    <div id="tab-players" class="tab-content active">
+      <div class="card">
+        <h3>Add Players</h3>
+        <input type="text" id="playerName" placeholder="Player name" maxlength="20" autocomplete="off">
+        <button id="addPlayerBtn">Add Player</button>
+        <ul id="playersList" class="player-list"></ul>
       </div>
     </div>
 
-    <div class="card">
-      <h3>Timer</h3>
-      <label class="muted">Discussion time (seconds)</label>
-      <input type="number" id="dayTimer" value="180" min="0">
+    <!-- ROLES TAB -->
+    <div id="tab-roles" class="tab-content">
+      <div class="card">
+        <h3>Role Assignment Mode</h3>
+        <select id="assignmentMode">
+          <option value="custom">Manual / Fixed Counts</option>
+          <option value="full_random">Mode 1: Full Random (All Roles)</option>
+          <option value="selected_random">Mode 2: Random on Selected Roles</option>
+        </select>
+        <p id="modeDesc" class="muted">Set exact quantities for each role manually.</p>
+      </div>
+
+      <div id="customRolesPanel" class="card">
+        <h3>Custom Counts</h3>
+        <div class="grid-2">
+          <div><label class="muted">Werewolves</label><input type="number" id="c_werewolf" value="2" min="1"></div>
+          <div><label class="muted">Seers</label><input type="number" id="c_seer" value="1" min="0"></div>
+          <div><label class="muted">Doctors</label><input type="number" id="c_doctor" value="1" min="0"></div>
+          <div><label class="muted">Witches</label><input type="number" id="c_witch" value="1" min="0"></div>
+          <div><label class="muted">Hunters</label><input type="number" id="c_hunter" value="1" min="0"></div>
+          <div><label class="muted">Cupids</label><input type="number" id="c_cupid" value="0" min="0"></div>
+          <div><label class="muted">Bodyguards</label><input type="number" id="c_bodyguard" value="0" min="0"></div>
+        </div>
+      </div>
+
+      <div id="selectedRolesPanel" class="card" style="display:none;">
+        <h3>Enabled Roles Pool</h3>
+        <p class="muted" style="margin-bottom:0.75rem;">Game will randomly decide presence and quantities from checked roles.</p>
+        <div class="toggle-row"><label for="sr_seer">Seer</label><input type="checkbox" id="sr_seer" checked></div>
+        <div class="toggle-row"><label for="sr_doctor">Doctor</label><input type="checkbox" id="sr_doctor" checked></div>
+        <div class="toggle-row"><label for="sr_witch">Witch</label><input type="checkbox" id="sr_witch" checked></div>
+        <div class="toggle-row"><label for="sr_hunter">Hunter</label><input type="checkbox" id="sr_hunter" checked></div>
+        <div class="toggle-row"><label for="sr_cupid">Cupid</label><input type="checkbox" id="sr_cupid"></div>
+        <div class="toggle-row"><label for="sr_bodyguard">Bodyguard</label><input type="checkbox" id="sr_bodyguard"></div>
+      </div>
+    </div>
+
+    <!-- SETTINGS TAB -->
+    <div id="tab-settings" class="tab-content">
+      <div class="card">
+        <h3>Game Rules</h3>
+        <div class="toggle-row">
+          <label for="firstNightImmunity">
+            <strong>First Night Kill Protection</strong><br>
+            <span class="muted">Werewolf attacks on Night 1 are prevented (peaceful first night).</span>
+          </label>
+          <input type="checkbox" id="firstNightImmunity" checked>
+        </div>
+        <div class="toggle-row">
+          <label for="hideVoteCounts">
+            <strong>Hide Live Vote Counts</strong><br>
+            <span class="muted">Do not show current vote tallies to players while voting.</span>
+          </label>
+          <input type="checkbox" id="hideVoteCounts" checked>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Discussion</h3>
+        <label class="muted">Discussion Timer (seconds, 0 = disabled)</label>
+        <input type="number" id="dayTimer" value="180" min="0">
+      </div>
     </div>
 
     <button id="startBtn" disabled>Start Game</button>
@@ -200,6 +285,7 @@
     <h1>Secret Roles</h1>
     <div class="phase-indicator">Pass device to each player</div>
     <div class="card">
+      <p class="center muted" style="margin-bottom:0.75rem;">Tap your name to reveal, tap again to hide.</p>
       <div id="revealGrid" class="grid-2"></div>
     </div>
     <button id="beginNightBtn">Begin Night 1</button>
@@ -231,7 +317,12 @@
       bodyguardLastTarget: null,
       timerId: null,
       timeLeft: 180,
-      log: []
+      log: [],
+      settings: {
+        firstNightImmunity: true,
+        hideVoteCounts: true,
+        dayTimer: 180
+      }
     };
 
     const $ = id => document.getElementById(id);
@@ -239,6 +330,26 @@
       document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
       $(name).classList.add('active');
     };
+
+    // Tab switcher
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        $(btn.dataset.tab).classList.add('active');
+      });
+    });
+
+    $('assignmentMode').addEventListener('change', e => {
+      const mode = e.target.value;
+      $('customRolesPanel').style.display = mode === 'custom' ? 'block' : 'none';
+      $('selectedRolesPanel').style.display = mode === 'selected_random' ? 'block' : 'none';
+
+      if (mode === 'custom') $('modeDesc').textContent = 'Set exact quantities for each role manually.';
+      if (mode === 'full_random') $('modeDesc').textContent = 'All game roles are in the pool. Werewolf ratio and special roles are randomly generated.';
+      if (mode === 'selected_random') $('modeDesc').textContent = 'Only selected roles can appear. Presence and count are randomly determined.';
+    });
 
     $('addPlayerBtn').addEventListener('click', addPlayer);
     $('playerName').addEventListener('keypress', e => { if (e.key === 'Enter') addPlayer(); });
@@ -249,7 +360,11 @@
     function addPlayer() {
       const name = $('playerName').value.trim();
       if (!name) return;
-      state.players.push({ id: Date.now(), name, role: null, alive: true, usedHeal: false, usedPoison: false });
+      if (state.players.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+        alert('Player name already added.');
+        return;
+      }
+      state.players.push({ id: Date.now() + Math.random(), name, role: null, alive: true, usedHeal: false, usedPoison: false });
       $('playerName').value = '';
       renderSetupPlayers();
     }
@@ -284,21 +399,64 @@
     }
 
     function assignRoles() {
-      const counts = {
-        werewolf: parseInt($('werewolfCount').value) || 0,
-        seer: parseInt($('seerCount').value) || 0,
-        doctor: parseInt($('doctorCount').value) || 0,
-        witch: parseInt($('witchCount').value) || 0,
-        hunter: parseInt($('hunterCount').value) || 0,
-        cupid: parseInt($('cupidCount').value) || 0,
-        bodyguard: parseInt($('bodyguardCount').value) || 0
-      };
-
+      const total = state.players.length;
+      const mode = $('assignmentMode').value;
       const roles = [];
-      Object.entries(counts).forEach(([role, count]) => {
-        for (let i = 0; i < count; i++) roles.push(role);
-      });
-      while (roles.length < state.players.length) roles.push('villager');
+
+      state.settings.firstNightImmunity = $('firstNightImmunity').checked;
+      state.settings.hideVoteCounts = $('hideVoteCounts').checked;
+      state.settings.dayTimer = parseInt($('dayTimer').value) || 0;
+
+      if (mode === 'custom') {
+        const counts = {
+          werewolf: parseInt($('c_werewolf').value) || 0,
+          seer: parseInt($('c_seer').value) || 0,
+          doctor: parseInt($('c_doctor').value) || 0,
+          witch: parseInt($('c_witch').value) || 0,
+          hunter: parseInt($('c_hunter').value) || 0,
+          cupid: parseInt($('c_cupid').value) || 0,
+          bodyguard: parseInt($('c_bodyguard').value) || 0
+        };
+
+        const totalCustom = Object.values(counts).reduce((a, b) => a + b, 0);
+        if (totalCustom > total) return alert('Total special roles exceed player count.');
+        if (counts.werewolf < 1) return alert('Must have at least 1 Werewolf.');
+        if (counts.werewolf >= total / 2) return alert('Werewolves must be fewer than half the players.');
+
+        Object.entries(counts).forEach(([r, count]) => {
+          for (let i = 0; i < count; i++) roles.push(r);
+        });
+      } else if (mode === 'full_random') {
+        const wolfCount = Math.max(1, Math.floor(total / 3.5));
+        for (let i = 0; i < wolfCount; i++) roles.push('werewolf');
+
+        const specials = ['seer', 'doctor', 'witch', 'hunter', 'cupid', 'bodyguard'];
+        shuffle(specials);
+        const slots = Math.floor(Math.random() * (total - wolfCount));
+        for (let i = 0; i < slots && i < specials.length; i++) {
+          roles.push(specials[i]);
+        }
+      } else if (mode === 'selected_random') {
+        const wolfCount = Math.max(1, Math.floor(total / 3.5));
+        for (let i = 0; i < wolfCount; i++) roles.push('werewolf');
+
+        const available = [];
+        if ($('sr_seer').checked) available.push('seer');
+        if ($('sr_doctor').checked) available.push('doctor');
+        if ($('sr_witch').checked) available.push('witch');
+        if ($('sr_hunter').checked) available.push('hunter');
+        if ($('sr_cupid').checked) available.push('cupid');
+        if ($('sr_bodyguard').checked) available.push('bodyguard');
+
+        shuffle(available);
+        available.forEach(r => {
+          if (roles.length < total && Math.random() > 0.35) {
+            roles.push(r);
+          }
+        });
+      }
+
+      while (roles.length < total) roles.push('villager');
       shuffle(roles);
 
       state.players.forEach((p, i) => {
@@ -311,7 +469,6 @@
       state.round = 1;
       state.lovers = null;
       state.bodyguardLastTarget = null;
-      state.timeLeft = parseInt($('dayTimer').value) || 180;
       state.log = [];
 
       renderRoleReveal();
@@ -341,7 +498,7 @@
     function runNightPhase() {
       clearInterval(state.timerId);
       state.phase = 'night';
-      state.nightActions = { werewolfVotes: {}, victim: null, investigated: null, healed: null, poisoned: null, doctorProtect: null, bodyguardProtect: null };
+      state.nightActions = { victim: null, investigated: null, healed: null, poisoned: null, doctorProtect: null, bodyguardProtect: null };
       $('phaseIndicator').textContent = `Night ${state.round}`;
       log(`--- Night ${state.round} ---`);
 
@@ -354,19 +511,21 @@
     }
 
     function nightCupid() {
-      let html = `<h3 class="center">Cupid</h3><p>Select two lovers:</p>`;
+      let html = `<h3 class="center">Cupid</h3><p class="center muted">Select two lovers:</p>`;
       html += `<select id="l1"><option value="">Lover 1...</option>${alivePlayers().map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       html += `<select id="l2"><option value="">Lover 2...</option>${alivePlayers().map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       html += `<button id="cupidBtn">Confirm Lovers</button>`;
       $('gameContent').innerHTML = html;
 
       $('cupidBtn').addEventListener('click', () => {
-        const l1 = parseInt($('l1').value);
-        const l2 = parseInt($('l2').value);
+        const l1 = parseFloat($('l1').value);
+        const l2 = parseFloat($('l2').value);
         if (l1 && l2 && l1 !== l2) {
           state.lovers = [l1, l2];
-          log(`Cupid linked two lovers.`);
+          log(`Cupid bound two lovers.`);
           nightWerewolf();
+        } else {
+          alert('Select two different players.');
         }
       });
     }
@@ -375,14 +534,23 @@
       const wolves = alivePlayers().filter(p => p.role === 'werewolf');
       if (!wolves.length) return nightSeer();
 
-      let html = `<h3 class="center">Werewolves</h3><p class="center muted">${wolves.map(p => p.name).join(', ')}</p>`;
-      html += `<select id="wolfSel"><option value="">Choose victim...</option>${alivePlayers().filter(p => p.role !== 'werewolf').map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
-      html += `<button id="wolfBtn">Confirm</button>`;
+      let html = `<h3 class="center">Werewolves</h3><p class="center muted">Wolves: ${wolves.map(p => p.name).join(', ')}</p>`;
+
+      if (state.round === 1 && state.settings.firstNightImmunity) {
+        html += `<p class="center" style="color:var(--warn)">First Night Immunity is active. Werewolves cannot eliminate anyone tonight.</p>`;
+        html += `<button id="wolfBtn">Acknowledge & Continue</button>`;
+      } else {
+        html += `<select id="wolfSel"><option value="">Choose victim...</option>${alivePlayers().filter(p => p.role !== 'werewolf').map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        html += `<button id="wolfBtn">Confirm Victim</button>`;
+      }
+
       $('gameContent').innerHTML = html;
 
       $('wolfBtn').addEventListener('click', () => {
-        const targetId = parseInt($('wolfSel').value);
-        if (targetId) state.nightActions.victim = targetId;
+        if (!(state.round === 1 && state.settings.firstNightImmunity)) {
+          const targetId = parseFloat($('wolfSel').value);
+          if (targetId) state.nightActions.victim = targetId;
+        }
         nightSeer();
       });
     }
@@ -391,12 +559,12 @@
       const seers = alivePlayers().filter(p => p.role === 'seer');
       if (!seers.length) return nightWitch();
 
-      let html = `<h3 class="center">Seer</h3><select id="seerSel"><option value="">Investigate...</option>${alivePlayers().map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+      let html = `<h3 class="center">Seer</h3><select id="seerSel"><option value="">Investigate player...</option>${alivePlayers().map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       html += `<div id="seerRes" class="center big"></div><button id="seerCheck">Investigate</button><button id="seerNext" class="secondary" style="display:none">Next</button>`;
       $('gameContent').innerHTML = html;
 
       $('seerCheck').addEventListener('click', () => {
-        const id = parseInt($('seerSel').value);
+        const id = parseFloat($('seerSel').value);
         const target = state.players.find(p => p.id === id);
         if (!target) return;
         $('seerRes').innerHTML = `${target.name} is ${target.role === 'werewolf' ? '<span class="role-badge role-werewolf">a Werewolf</span>' : '<span class="role-badge role-villager">NOT a Werewolf</span>'}`;
@@ -415,7 +583,7 @@
       let html = `<h3 class="center">Witch</h3>`;
 
       if (victim && !witch.usedHeal) {
-        html += `<p class="center">${victim.name} is targeted. Use heal potion?</p><button id="witchHeal" class="success">Heal</button>`;
+        html += `<p class="center">${victim.name} is targeted. Use Heal potion?</p><button id="witchHeal" class="success">Heal</button>`;
       }
       if (!witch.usedPoison) {
         html += `<select id="witchPoisonSel"><option value="">Poison someone...</option>${alivePlayers().map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select><button id="witchPoison" class="danger">Poison</button>`;
@@ -429,7 +597,7 @@
         $('witchHeal').disabled = true;
       });
       if ($('witchPoison')) $('witchPoison').addEventListener('click', () => {
-        const id = parseInt($('witchPoisonSel').value);
+        const id = parseFloat($('witchPoisonSel').value);
         if (id) {
           state.nightActions.poisoned = id;
           witch.usedPoison = true;
@@ -443,12 +611,13 @@
       const guards = alivePlayers().filter(p => p.role === 'bodyguard');
       if (!guards.length) return nightDoctor();
 
-      let html = `<h3 class="center">Bodyguard</h3><select id="guardSel"><option value="">Protect...</option>${alivePlayers().filter(p => p.id !== state.bodyguardLastTarget).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+      let html = `<h3 class="center">Bodyguard</h3><p class="center muted">Cannot protect the same person consecutively.</p>`;
+      html += `<select id="guardSel"><option value="">Protect...</option>${alivePlayers().filter(p => p.id !== state.bodyguardLastTarget).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       html += `<button id="guardBtn">Protect</button>`;
       $('gameContent').innerHTML = html;
 
       $('guardBtn').addEventListener('click', () => {
-        const id = parseInt($('guardSel').value);
+        const id = parseFloat($('guardSel').value);
         if (id) {
           state.nightActions.bodyguardProtect = id;
           state.bodyguardLastTarget = id;
@@ -466,7 +635,7 @@
       $('gameContent').innerHTML = html;
 
       $('docBtn').addEventListener('click', () => {
-        const id = parseInt($('docSel').value);
+        const id = parseFloat($('docSel').value);
         if (id) state.nightActions.doctorProtect = id;
         resolveNight();
       });
@@ -523,23 +692,24 @@
       state.votes = {};
       $('phaseIndicator').textContent = `Day ${state.round}`;
 
-      let currentSecs = parseInt($('dayTimer').value) || 180;
-      let html = `
-        <h3 class="center">Discussion</h3>
-        <div class="timer" id="timerDisplay">${Math.floor(currentSecs / 60)}:${(currentSecs % 60).toString().padStart(2, '0')}</div>
-        <button id="voteStartBtn" class="success">Begin Voting</button>
-        <div id="voteArea"></div>
-      `;
+      let currentSecs = state.settings.dayTimer;
+      let html = `<h3 class="center">Day Discussion</h3>`;
+      if (currentSecs > 0) {
+        html += `<div class="timer" id="timerDisplay">${Math.floor(currentSecs / 60)}:${(currentSecs % 60).toString().padStart(2, '0')}</div>`;
+      }
+      html += `<button id="voteStartBtn" class="success">Begin Voting</button><div id="voteArea"></div>`;
       $('gameContent').innerHTML = html;
 
-      clearInterval(state.timerId);
-      state.timerId = setInterval(() => {
-        currentSecs--;
-        const m = Math.floor(currentSecs / 60);
-        const s = (currentSecs % 60).toString().padStart(2, '0');
-        if ($('timerDisplay')) $('timerDisplay').textContent = `${m}:${s}`;
-        if (currentSecs <= 0) clearInterval(state.timerId);
-      }, 1000);
+      if (currentSecs > 0) {
+        clearInterval(state.timerId);
+        state.timerId = setInterval(() => {
+          currentSecs--;
+          const m = Math.floor(currentSecs / 60);
+          const s = (currentSecs % 60).toString().padStart(2, '0');
+          if ($('timerDisplay')) $('timerDisplay').textContent = `${m}:${s}`;
+          if (currentSecs <= 0) clearInterval(state.timerId);
+        }, 1000);
+      }
 
       $('voteStartBtn').addEventListener('click', renderVoteArea);
     }
@@ -547,21 +717,26 @@
     function renderVoteArea() {
       clearInterval(state.timerId);
       const alive = alivePlayers();
-      let html = `<h3 class="center">Voting</h3><div class="grid-2">`;
+      const hideCounts = state.settings.hideVoteCounts;
+
+      let html = `<h3 class="center">Voting Phase</h3><p class="center muted">${Object.keys(state.votes).length}/${alive.length} votes recorded</p><div class="grid-2">`;
       alive.forEach(p => {
         const count = Object.values(state.votes).filter(id => id === p.id).length;
-        html += `<button class="secondary vote-btn" data-id="${p.id}">${p.name} (${count})</button>`;
+        const countDisplay = hideCounts ? '' : ` (${count})`;
+        html += `<button class="secondary vote-btn" data-id="${p.id}">${p.name}${countDisplay}</button>`;
       });
       html += `</div><button id="resolveVoteBtn" style="margin-top:1rem">Resolve Votes</button>`;
       $('gameContent').innerHTML = html;
 
       document.querySelectorAll('.vote-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-          const voterName = prompt(`Who is voting?`);
+          const voterName = prompt(`Who is casting this vote?`);
           const voter = state.players.find(p => p.name.toLowerCase() === (voterName || '').toLowerCase() && p.alive);
           if (voter) {
-            state.votes[voter.id] = parseInt(btn.dataset.id);
+            state.votes[voter.id] = parseFloat(btn.dataset.id);
             renderVoteArea();
+          } else if (voterName) {
+            alert('Player not found or already eliminated.');
           }
         });
       });
@@ -575,32 +750,38 @@
 
       let max = 0, tied = [];
       Object.entries(tally).forEach(([id, count]) => {
-        if (count > max) { max = count; tied = [parseInt(id)]; }
-        else if (count === max) tied.push(parseInt(id));
+        if (count > max) { max = count; tied = [parseFloat(id)]; }
+        else if (count === max) tied.push(parseFloat(id));
       });
 
-      let html = `<h3 class="center">Vote Result</h3>`;
+      let html = `<h3 class="center">Vote Results</h3>`;
+      Object.entries(tally).forEach(([id, count]) => {
+        const p = state.players.find(x => x.id === parseFloat(id));
+        if (p) html += `<p class="center muted">${p.name}: ${count} vote(s)</p>`;
+      });
+
       if (tied.length === 1 && max > 0) {
         const elim = state.players.find(p => p.id === tied[0]);
         processDeaths(new Set([elim.id]));
-        html += `<p class="center"><strong>${elim.name}</strong> was eliminated. (<span class="role-badge role-${elim.role}">${roleName(elim.role)}</span>)</p>`;
+        html += `<p class="center" style="margin-top:0.5rem;"><strong>${elim.name}</strong> was eliminated. (<span class="role-badge role-${elim.role}">${roleName(elim.role)}</span>)</p>`;
 
         if (elim.role === 'hunter') {
-          html += `<select id="hunterSel"><option value="">Hunter's Revenge Target...</option>${alivePlayers().map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
-          html += `<button id="hunterBtn" class="danger">Take Shot</button>`;
+          html += `<p class="center" style="color:var(--hunter)">Hunter gets a final revenge shot!</p>`;
+          html += `<select id="hunterSel"><option value="">Choose target...</option>${alivePlayers().map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+          html += `<button id="hunterBtn" class="danger">Shoot</button>`;
           $('gameContent').innerHTML = html;
           $('hunterBtn').addEventListener('click', () => {
-            const hId = parseInt($('hunterSel').value);
+            const hId = parseFloat($('hunterSel').value);
             if (hId) processDeaths(new Set([hId]));
             finishDay();
           });
           return;
         }
       } else {
-        html += `<p class="center">Vote tied or none cast. No one eliminated.</p>`;
+        html += `<p class="center" style="margin-top:0.5rem;">Vote was tied or no votes cast. No one eliminated.</p>`;
       }
 
-      $('gameContent').innerHTML = html + `<button id="nextNightBtn" class="danger">Night Falls</button>`;
+      $('gameContent').innerHTML = html + `<button id="nextNightBtn" class="danger" style="margin-top:1rem">Night Falls</button>`;
       $('nextNightBtn').addEventListener('click', () => {
         state.round++;
         if (!checkWin()) runNightPhase();
@@ -608,7 +789,7 @@
     }
 
     function finishDay() {
-      $('gameContent').innerHTML = `<button id="nextNightBtn" class="danger">Night Falls</button>`;
+      $('gameContent').innerHTML += `<button id="nextNightBtn" class="danger" style="margin-top:1rem">Night Falls</button>`;
       $('nextNightBtn').addEventListener('click', () => {
         state.round++;
         if (!checkWin()) runNightPhase();
