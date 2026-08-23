@@ -174,6 +174,23 @@
       background: rgba(19, 25, 38, 0.6);
     }
 
+    .role-banner {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.85rem;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+
+    .action-box {
+      background: var(--surface-3);
+      border-radius: 10px;
+      padding: 0.85rem;
+      margin-top: 0.75rem;
+      border: 1px solid var(--border);
+    }
+
     .log {
       font-family: ui-monospace, monospace;
       font-size: 0.8rem;
@@ -305,48 +322,39 @@
         </div>
       </div>
 
-      <button id="startBtn" class="success" disabled>Start Game & Assign Roles</button>
+      <button id="startBtn" class="success" disabled>Start Game</button>
     </div>
 
-    <!-- PASS & PLAY HUB SCREEN -->
+    <!-- PASS & PLAY PRIVACY BUFFER -->
     <div id="passhub" class="screen">
       <div class="card center">
         <h2 id="hubTitle">Pass Device</h2>
         <div class="privacy-box">
           <p class="muted" style="margin-bottom:0.5rem;">Pass device to player:</p>
           <div class="giant" id="hubPlayerName" style="color:var(--safe); margin-bottom: 1rem;">Player</div>
-          <p class="muted" style="font-size:0.8rem;">Ensure only this player can see the screen before clicking.</p>
+          <p class="muted" style="font-size:0.85rem;">Ensure only this player can see the screen before clicking.</p>
         </div>
-        <button id="hubActionBtn" class="purple big" style="padding:1rem;">I am [Player] — Reveal</button>
+        <button id="hubActionBtn" class="purple big" style="padding:1rem;">I am [Player] — Open My Turn</button>
       </div>
     </div>
 
-    <!-- ROLE REVEAL PRIVATE VIEW -->
-    <div id="privateReveal" class="screen">
-      <div class="card center">
-        <p class="muted" style="margin-bottom:0.25rem;">Secret Role for</p>
-        <h2 id="privPlayerName" style="margin-bottom:0.5rem;"></h2>
-        <div style="margin: 0.75rem 0;">
-          <span id="privRoleBadge" class="role-badge" style="font-size:0.9rem; padding:0.4rem 0.8rem;"></span>
-        </div>
-        <h3 id="privRoleTitle" style="color:var(--text); margin-bottom:0.5rem;"></h3>
-        <p id="privRoleDesc" style="margin: 1rem 0; line-height: 1.5; font-size:0.95rem;"></p>
-        <div id="privExtraInfo" style="margin: 0.75rem 0; font-size:0.9rem; color:var(--solo);"></div>
-        <button id="privDoneBtn" class="success big" style="margin-top:1rem; padding:0.9rem;">I Know My Role — Hide & Pass Next</button>
-      </div>
-    </div>
-
-    <!-- NIGHT TURN PRIVATE VIEW -->
+    <!-- UNIFIED NIGHT / ROLE VIEW (Role Discovery + Action in Same Screen) -->
     <div id="nightTurn" class="screen">
       <div class="card">
-        <div class="center" style="margin-bottom:0.5rem;">
-          <span class="muted">Night Phase</span> · <strong id="nightTurnPlayerName"></strong>
-          <div style="margin-top:0.25rem;">
+        <div class="role-banner">
+          <p class="muted" id="nightRoundHeading" style="font-size:0.8rem; margin-bottom:0.2rem;"></p>
+          <h2 id="nightTurnPlayerName" style="margin-bottom:0.35rem;"></h2>
+          <div>
             <span id="nightTurnRoleBadge" class="role-badge"></span>
           </div>
+          <h3 id="nightTurnRoleTitle" style="margin-top:0.4rem; margin-bottom:0.25rem;"></h3>
+          <p id="nightTurnRoleDesc" class="muted" style="font-size:0.85rem; line-height:1.4;"></p>
+          <div id="nightTurnExtraInfo" style="margin-top:0.5rem; font-size:0.85rem; color:var(--solo);"></div>
         </div>
-        <div id="nightTurnContent" style="margin:1rem 0;"></div>
-        <button id="nightTurnConfirmBtn" class="purple big" style="margin-top:0.5rem; padding:0.9rem;">Confirm & Pass Next</button>
+
+        <div id="nightTurnActionArea" class="action-box"></div>
+
+        <button id="nightTurnConfirmBtn" class="purple big" style="margin-top:1rem; padding:0.9rem;">Confirm Action & Hide Screen</button>
       </div>
     </div>
 
@@ -361,7 +369,7 @@
       </div>
     </div>
 
-    <!-- GAMEPLAY GENERAL SCREEN (Morning / Discussion / Results) -->
+    <!-- GENERAL GAMEPLAY SCREEN (Morning / Discussion / Results) -->
     <div id="game" class="screen">
       <div class="card center" style="margin-bottom:0.5rem; padding:0.6rem;">
         <span id="phaseIndicator" class="big"></span>
@@ -484,7 +492,6 @@
       $(name).classList.add('active');
     };
 
-    // Tab Navigation
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -494,7 +501,6 @@
       });
     });
 
-    // Mode dropdown listener
     $('assignmentMode').addEventListener('change', e => {
       const mode = e.target.value;
       if (mode === 'selected_random') {
@@ -565,7 +571,7 @@
 
     $('addPlayerBtn').addEventListener('click', addPlayer);
     $('playerName').addEventListener('keypress', e => { if (e.key === 'Enter') addPlayer(); });
-    $('startBtn').addEventListener('click', startRoleAssignment);
+    $('startBtn').addEventListener('click', startGame);
     $('newGameBtn').addEventListener('click', () => location.reload());
 
     function addPlayer() {
@@ -614,8 +620,7 @@
       $('gameLog').scrollTop = $('gameLog').scrollHeight;
     }
 
-    // Role assignment & begin Sequential Role Discovery
-    function startRoleAssignment() {
+    function startGame() {
       const total = state.players.length;
       const mode = $('assignmentMode').value;
       const roles = [];
@@ -688,79 +693,26 @@
       state.sect = [];
       state.doused = [];
       state.log = [];
-      state.turnIndex = 0;
 
-      // Start pass-around discovery
-      showDiscoveryHub();
+      beginNightPhase();
     }
 
-    // 1. DISCOVERY PASS-AND-PLAY FLOW
-    function showDiscoveryHub() {
-      if (state.turnIndex >= state.players.length) {
-        return beginNightPhase();
-      }
-      const player = state.players[state.turnIndex];
-      $('hubTitle').textContent = `Role Discovery (${state.turnIndex + 1}/${state.players.length})`;
-      $('hubPlayerName').textContent = player.name;
-      $('hubActionBtn').textContent = `I am ${player.name} — Reveal My Role`;
-      $('hubActionBtn').onclick = () => showPrivateRoleView(player);
-      switchScreen('passhub');
-    }
-
-    function showPrivateRoleView(player) {
-      const r = ROLES[player.role];
-      $('privPlayerName').textContent = player.name;
-      $('privRoleTitle').textContent = r.name;
-      $('privRoleBadge').className = `role-badge badge-${r.team}`;
-      $('privRoleBadge').textContent = `${r.team.toUpperCase()} TEAM`;
-      $('privRoleDesc').textContent = r.desc;
-
-      let extra = '';
-      if (isWolf(player.role)) {
-        const otherWolves = state.players.filter(p => isWolf(p.role) && p.id !== player.id);
-        if (otherWolves.length > 0) {
-          extra = `🐺 Pack Members: <strong>${otherWolves.map(w => w.name).join(', ')}</strong>`;
-        } else {
-          extra = `🐺 You are currently the only Werewolf.`;
-        }
-      } else if (player.role === 'sibling') {
-        const otherSiblings = state.players.filter(p => p.role === 'sibling' && p.id !== player.id);
-        if (otherSiblings.length > 0) {
-          extra = `👥 Other Siblings: <strong>${otherSiblings.map(s => s.name).join(', ')}</strong>`;
-        }
-      }
-      $('privExtraInfo').innerHTML = extra;
-
-      $('privDoneBtn').onclick = () => {
-        state.turnIndex++;
-        showDiscoveryHub();
-      };
-
-      switchScreen('privateReveal');
-    }
-
-    // 2. NIGHT PHASE PASS-AND-PLAY FLOW
     function beginNightPhase() {
       state.phase = 'night';
       state.nightWolfVotes = {};
       state.nightActions = {
         protectId: null,
         seerTarget: null,
-        seerApprenticeTarget: null,
         serialKillId: null,
-        witchHeal: false,
         witchPoisonId: null,
         arsonistAction: null,
         sectLeaderTarget: null,
         sectHunterTarget: null,
         priestTarget: null,
-        cupidLovers: null,
         asleepTarget: null,
         silencedTarget: null,
         redLadyStay: null,
-        marksmanTarget: null,
-        beastTrapTarget: null,
-        naughtySwap: null
+        beastTrapTarget: null
       };
 
       state.turnIndex = 0;
@@ -775,25 +727,45 @@
       }
 
       const player = living[state.turnIndex];
-      $('hubTitle').textContent = `Night ${state.round} Turn (${state.turnIndex + 1}/${living.length})`;
+      const isNight1 = state.round === 1;
+      $('hubTitle').textContent = isNight1 ? `Role Reveal & Night 1 Action` : `Night ${state.round} Action`;
       $('hubPlayerName').textContent = player.name;
-      $('hubActionBtn').textContent = `I am ${player.name} — Open Night Action`;
+      $('hubActionBtn').textContent = `I am ${player.name} — Open My Screen`;
       $('hubActionBtn').onclick = () => showNightPlayerTurn(player);
       switchScreen('passhub');
     }
 
     function showNightPlayerTurn(player) {
       const r = ROLES[player.role];
-      $('nightTurnPlayerName').textContent = player.name;
-      $('nightTurnRoleBadge').className = `role-badge badge-${r.team}`;
-      $('nightTurnRoleBadge').textContent = r.name;
+      const isNight1 = state.round === 1;
 
-      const content = $('nightTurnContent');
-      let html = '';
+      $('nightRoundHeading').textContent = isNight1 ? `Night 1 · Secret Role & Action (${state.turnIndex + 1}/${alivePlayers().length})` : `Night ${state.round} Turn (${state.turnIndex + 1}/${alivePlayers().length})`;
+      $('nightTurnPlayerName').textContent = player.name;
+      $('nightTurnRoleTitle').textContent = r.name;
+      $('nightTurnRoleBadge').className = `role-badge badge-${r.team}`;
+      $('nightTurnRoleBadge').textContent = `${r.team.toUpperCase()} TEAM`;
+      $('nightTurnRoleDesc').textContent = r.desc;
+
+      let extra = '';
+      if (isWolf(player.role)) {
+        const otherWolves = state.players.filter(p => isWolf(p.role) && p.id !== player.id);
+        extra = otherWolves.length > 0 ? `🐺 Fellow Werewolves: <strong>${otherWolves.map(w => w.name).join(', ')}</strong>` : `🐺 You are the only Werewolf.`;
+      } else if (player.role === 'sibling') {
+        const otherSiblings = state.players.filter(p => p.role === 'sibling' && p.id !== player.id);
+        extra = `👥 Siblings: <strong>${otherSiblings.length ? otherSiblings.map(s => s.name).join(', ') : 'None'}</strong>`;
+      } else if (state.lovers && state.lovers.includes(player.id)) {
+        const partnerId = state.lovers.find(id => id !== player.id);
+        const partner = state.players.find(p => p.id === partnerId);
+        extra = `❤️ You are in love with <strong>${partner ? partner.name : 'Unknown'}</strong>!`;
+      }
+      $('nightTurnExtraInfo').innerHTML = extra;
+
+      const actionArea = $('nightTurnActionArea');
+      let actHtml = '';
 
       if (state.asleepId === player.id) {
-        html = `<p class="center" style="color:var(--wolf);">You were put to sleep by the Nightmare Werewolf! You cannot perform actions tonight.</p>`;
-        content.innerHTML = html;
+        actHtml = `<p class="center" style="color:var(--wolf);">You were put to sleep by the Nightmare Werewolf! You cannot perform actions tonight.</p>`;
+        actionArea.innerHTML = actHtml;
         $('nightTurnConfirmBtn').onclick = () => {
           state.turnIndex++;
           showNightHub();
@@ -805,123 +777,99 @@
       const living = alivePlayers();
       const otherLiving = living.filter(p => p.id !== player.id);
 
-      // WEREWOLF INDIVIDUAL NIGHT VOTE
       if (isWolf(player.role)) {
-        const fellowWolves = living.filter(p => isWolf(p.role) && p.id !== player.id);
         const nonWolves = living.filter(p => !isWolf(p.role));
 
-        html += `<p class="muted center" style="margin-bottom:0.75rem;">🐺 Werewolf Pack: <strong>${[player.name, ...fellowWolves.map(w => w.name)].join(', ')}</strong></p>`;
-
         if (state.round === 1 && state.settings.firstNightImmunity) {
-          html += `<p class="center" style="color:var(--solo); margin:0.75rem 0;">First Night Kill Protection is ON. Werewolves cannot eliminate tonight.</p>`;
+          actHtml += `<p class="center" style="color:var(--solo); margin:0.4rem 0;">First Night Kill Protection is ON. Werewolves cannot eliminate tonight.</p>`;
         } else {
-          html += `<label><strong>Cast Your Individual Kill Vote:</strong></label>`;
-          html += `<select id="wolfIndividualVote"><option value="">Select target to eliminate...</option>${nonWolves.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+          actHtml += `<label><strong>Cast Your Individual Kill Vote:</strong></label>`;
+          actHtml += `<select id="wolfIndividualVote"><option value="">Select player to eliminate...</option>${nonWolves.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         }
 
         if (player.role === 'nightmare_werewolf' && !player.usedOneTime) {
-          html += `<label style="margin-top:0.75rem;"><strong>Put a player to sleep (Disables their action):</strong></label>`;
-          html += `<select id="nightmareTarget"><option value="">None (skip)</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+          actHtml += `<label style="margin-top:0.6rem;"><strong>Put a player to sleep for tonight:</strong></label>`;
+          actHtml += `<select id="nightmareTarget"><option value="">None (skip)</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         } else if (player.role === 'wolf_seer') {
-          html += `<label style="margin-top:0.75rem;"><strong>Wolf Seer: Uncover Exact Role:</strong></label>`;
-          html += `<select id="wolfSeerTarget"><option value="">Select player to uncover...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
-          html += `<div id="wolfSeerResult" class="center big" style="margin:0.5rem 0;"></div><button type="button" class="secondary" id="wolfSeerInspectBtn">Inspect Role</button>`;
+          actHtml += `<label style="margin-top:0.6rem;"><strong>Wolf Seer: Uncover Exact Role:</strong></label>`;
+          actHtml += `<select id="wolfSeerTarget"><option value="">Select player to uncover...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+          actHtml += `<div id="wolfSeerResult" class="center big" style="margin:0.4rem 0;"></div><button type="button" class="secondary" id="wolfSeerInspectBtn">Inspect Role</button>`;
         } else if (player.role === 'sorcerer') {
-          html += `<label style="margin-top:0.75rem;"><strong>Sorcerer: Check if Seer or Werewolf:</strong></label>`;
-          html += `<select id="sorcererTarget"><option value="">Select player to check...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
-          html += `<div id="sorcererResult" class="center big" style="margin:0.5rem 0;"></div><button type="button" class="secondary" id="sorcererInspectBtn">Check Target</button>`;
+          actHtml += `<label style="margin-top:0.6rem;"><strong>Sorcerer: Check if Seer or Werewolf:</strong></label>`;
+          actHtml += `<select id="sorcererTarget"><option value="">Select player to check...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+          actHtml += `<div id="sorcererResult" class="center big" style="margin:0.4rem 0;"></div><button type="button" class="secondary" id="sorcererInspectBtn">Check Target</button>`;
         }
       }
-      // SEER
-      else if (player.role === 'seer') {
-        html += `<label><strong>Inspect a Player:</strong></label>`;
-        html += `<select id="seerSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
-        html += `<div id="seerInspectionResult" class="center big" style="margin:0.5rem 0;"></div><button type="button" class="secondary" id="seerInspectBtn">Reveal Alignment</button>`;
+      else if (player.role === 'seer' || (player.role === 'seer_apprentice' && !alivePlayers().some(x => x.role === 'seer'))) {
+        actHtml += `<label><strong>Investigate a Player's Alignment:</strong></label>`;
+        actHtml += `<select id="seerSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        actHtml += `<div id="seerInspectionResult" class="center big" style="margin:0.4rem 0;"></div><button type="button" class="secondary" id="seerInspectBtn">Reveal Alignment</button>`;
       }
-      // AURA SEER
       else if (player.role === 'aura_seer') {
-        html += `<label><strong>Inspect Aura:</strong></label>`;
-        html += `<select id="auraSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
-        html += `<div id="auraResult" class="center big" style="margin:0.5rem 0;"></div><button type="button" class="secondary" id="auraInspectBtn">Scan Aura</button>`;
+        actHtml += `<label><strong>Inspect Player Aura:</strong></label>`;
+        actHtml += `<select id="auraSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        actHtml += `<div id="auraResult" class="center big" style="margin:0.4rem 0;"></div><button type="button" class="secondary" id="auraInspectBtn">Scan Aura</button>`;
       }
-      // DOCTOR / BODYGUARD
       else if (player.role === 'doctor' || player.role === 'bodyguard') {
-        html += `<label><strong>Select a Player to Protect Tonight:</strong></label>`;
-        html += `<select id="protectSelect"><option value="">Select player...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        actHtml += `<label><strong>Select a Player to Protect Tonight:</strong></label>`;
+        actHtml += `<select id="protectSelect"><option value="">Select player...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
-      // WITCH
       else if (player.role === 'witch') {
-        html += `<p class="muted">Potions Remaining: Heal: <strong>${state.witchHealUsed ? 'Used' : 'Available'}</strong> | Poison: <strong>${state.witchPoisonUsed ? 'Used' : 'Available'}</strong></p>`;
+        actHtml += `<p class="muted" style="margin-bottom:0.4rem;">Potions: Heal: <strong>${state.witchHealUsed ? 'Used' : 'Available'}</strong> | Poison: <strong>${state.witchPoisonUsed ? 'Used' : 'Available'}</strong></p>`;
         if (!state.witchPoisonUsed) {
-          html += `<label style="margin-top:0.5rem;"><strong>Poison a Player (Optional):</strong></label>`;
-          html += `<select id="witchPoisonSelect"><option value="">Do not poison anyone</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+          actHtml += `<label><strong>Poison a Player (Optional):</strong></label>`;
+          actHtml += `<select id="witchPoisonSelect"><option value="">Do not poison anyone</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         }
       }
-      // PRIEST
       else if (player.role === 'priest' && !player.usedOneTime) {
-        html += `<label><strong>Throw Holy Water (Once per game):</strong></label>`;
-        html += `<select id="priestSelect"><option value="">Skip for tonight</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        actHtml += `<label><strong>Throw Holy Water (Once per game):</strong></label>`;
+        actHtml += `<select id="priestSelect"><option value="">Skip for tonight</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
-      // SERIAL KILLER
       else if (player.role === 'serial_killer') {
-        html += `<label><strong>Choose Night Victim:</strong></label>`;
-        html += `<select id="serialKillSelect"><option value="">Select target...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        actHtml += `<label><strong>Choose Night Victim:</strong></label>`;
+        actHtml += `<select id="serialKillSelect"><option value="">Select target...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
-      // ARSONIST
       else if (player.role === 'arsonist') {
-        html += `<p class="muted">Currently Doused Players: <strong>${state.doused.length ? state.players.filter(p => state.doused.includes(p.id)).map(p => p.name).join(', ') : 'None'}</strong></p>`;
-        html += `<label><strong>Arsonist Action:</strong></label>`;
-        html += `<select id="arsonistMode"><option value="douse">Douse 2 Players with Gasoline</option><option value="ignite">Ignite All Doused Players</option></select>`;
-        html += `<div id="douseSelectors">`;
-        html += `<select id="douse1"><option value="">Target 1...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
-        html += `<select id="douse2"><option value="">Target 2...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
-        html += `</div>`;
+        actHtml += `<p class="muted" style="margin-bottom:0.4rem;">Currently Doused: <strong>${state.doused.length ? state.players.filter(p => state.doused.includes(p.id)).map(p => p.name).join(', ') : 'None'}</strong></p>`;
+        actHtml += `<label><strong>Arsonist Action:</strong></label>`;
+        actHtml += `<select id="arsonistMode"><option value="douse">Douse 2 Players with Gasoline</option><option value="ignite">Ignite All Doused Players</option></select>`;
+        actHtml += `<div id="douseSelectors">`;
+        actHtml += `<select id="douse1"><option value="">Target 1...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        actHtml += `<select id="douse2"><option value="">Target 2...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        actHtml += `</div>`;
       }
-      // SECT LEADER
       else if (player.role === 'sect_leader') {
         const sectNames = state.players.filter(p => state.sect.includes(p.id)).map(p => p.name);
-        html += `<p class="muted">Current Sect: <strong>${sectNames.length ? sectNames.join(', ') : 'Just you'}</strong></p>`;
-        html += `<label><strong>Convert a Player to your Sect:</strong></label>`;
-        html += `<select id="sectConvertSelect"><option value="">Select target...</option>${otherLiving.filter(p => !state.sect.includes(p.id)).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        actHtml += `<p class="muted" style="margin-bottom:0.4rem;">Current Sect: <strong>${sectNames.length ? sectNames.join(', ') : 'Just you'}</strong></p>`;
+        actHtml += `<label><strong>Convert a Player to your Sect:</strong></label>`;
+        actHtml += `<select id="sectConvertSelect"><option value="">Select target...</option>${otherLiving.filter(p => !state.sect.includes(p.id)).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
-      // SECT HUNTER
       else if (player.role === 'sect_hunter') {
-        html += `<label><strong>Hunt Sect Member:</strong></label>`;
-        html += `<select id="sectHuntSelect"><option value="">Select player to check & hunt...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        actHtml += `<label><strong>Hunt Sect Member:</strong></label>`;
+        actHtml += `<select id="sectHuntSelect"><option value="">Select player to check & hunt...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
-      // CUPID (Night 1 only)
       else if (player.role === 'cupid' && state.round === 1 && !state.lovers) {
-        html += `<label><strong>Bind Two Lovers:</strong></label>`;
-        html += `<select id="cupidLover1"><option value="">Lover 1...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
-        html += `<select id="cupidLover2"><option value="">Lover 2...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        actHtml += `<label><strong>Bind Two Lovers for the Match:</strong></label>`;
+        actHtml += `<select id="cupidLover1"><option value="">Lover 1...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        actHtml += `<select id="cupidLover2"><option value="">Lover 2...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
-      // GRUMPY GRANDMA
       else if (player.role === 'grumpy_grandma') {
-        html += `<label><strong>Silence a Player for Tomorrow:</strong></label>`;
-        html += `<select id="grandmaSilenceSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        actHtml += `<label><strong>Silence a Player for Tomorrow:</strong></label>`;
+        actHtml += `<select id="grandmaSilenceSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
-      // RED LADY
       else if (player.role === 'red_lady') {
-        html += `<label><strong>Visit a Player's House Tonight:</strong></label>`;
-        html += `<select id="redLadySelect"><option value="">Stay at home</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        actHtml += `<label><strong>Visit a Player's House Tonight:</strong></label>`;
+        actHtml += `<select id="redLadySelect"><option value="">Stay at home</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
-      // BEAST HUNTER
       else if (player.role === 'beast_hunter') {
-        html += `<label><strong>Set Delayed Beast Trap:</strong></label>`;
-        html += `<select id="beastTrapSelect"><option value="">Select player to trap...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        actHtml += `<label><strong>Set Delayed Beast Trap:</strong></label>`;
+        actHtml += `<select id="beastTrapSelect"><option value="">Select player to trap...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
-      // MARKSMAN
-      else if (player.role === 'marksman' && player.arrows > 0) {
-        html += `<p class="muted">Arrows remaining: <strong>${player.arrows}</strong></p>`;
-        html += `<label><strong>Mark a Target for Tomorrow:</strong></label>`;
-        html += `<select id="marksmanSelect"><option value="">None (skip)</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
-      }
-      // PASSIVE ROLES
       else {
-        html += `<div class="privacy-box"><p class="big">😴 You sleep peacefully through the night.</p><p class="muted" style="margin-top:0.5rem;">No active night decisions needed.</p></div>`;
+        actHtml += `<p class="center" style="margin: 0.5rem 0;">😴 <strong>You sleep peacefully through the night.</strong></p><p class="muted center" style="font-size:0.8rem;">No night action required.</p>`;
       }
 
-      content.innerHTML = html;
+      actionArea.innerHTML = actHtml;
 
       if ($('seerInspectBtn')) {
         $('seerInspectBtn').onclick = () => {
@@ -1029,7 +977,6 @@
       switchScreen('nightTurn');
     }
 
-    // NIGHT RESOLUTION
     function resolveNightPhase() {
       const deadQueue = new Set();
       const activeTrap = state.activeTrap;
@@ -1054,9 +1001,9 @@
         if (victim) {
           if (victim.role === 'cursed_human') {
             victim.role = 'werewolf';
-            log(`Cursed Human was attacked by werewolves and converted!`);
+            log(`Cursed Human was attacked by werewolves and converted into a Werewolf!`);
           } else if (victim.id === activeTrap) {
-            log(`Werewolves fell into the Beast Hunter trap! Attack thwarted.`);
+            log(`Werewolves attacked the Beast Hunter trap! Attack thwarted.`);
           } else if (victim.role !== 'wise_man' && victim.id !== state.nightActions.protectId) {
             deadQueue.add(victim.id);
           }
@@ -1147,7 +1094,6 @@
       $('startDayBtn').onclick = runDayPhase;
     }
 
-    // 3. DAY PHASE & SEQUENTIAL DAY VOTING
     function runDayPhase() {
       state.phase = 'day';
       state.dayVotes = {};
