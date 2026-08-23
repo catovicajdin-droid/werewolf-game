@@ -48,7 +48,6 @@
       transition: background 0.5s ease;
     }
 
-    /* Ambient Phase Theming */
     body.theme-night {
       background-image: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #09091f 50%, #02020a 100%);
     }
@@ -83,7 +82,6 @@
 
     h2, h3 { text-align: center; margin-bottom: 0.75rem; font-weight: 700; }
 
-    /* Glass Tabs */
     .tabs {
       display: flex;
       gap: 0.4rem;
@@ -119,7 +117,6 @@
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
-    /* Glass Cards */
     .card {
       background: var(--glass-surface);
       backdrop-filter: blur(16px);
@@ -582,7 +579,7 @@
       doctor: { name: 'Doctor', team: 'village', stackable: false, desc: 'Each night, protect a player from werewolf elimination.' },
       witch: { name: 'Witch', team: 'village', stackable: false, desc: 'Has 1 heal potion (shields entire village for the turn) and 1 poison potion for the game.' },
       avenger: { name: 'Avenger', team: 'village', stackable: false, desc: 'Each night, choose who you drag down with you if you are eliminated.' },
-      seer_apprentice: { name: 'Seer apprentice', team: 'village', stackable: false, desc: 'Takes over as active Seer when the original Seer dies.' },
+      seer_apprentice: { name: 'Seer apprentice', team: 'village', stackable: false, desc: 'Takes over as active Seer only after the original Seer dies.' },
       pacifist: { name: 'Pacifist', team: 'village', stackable: false, desc: 'Once per game at night, choose a player to reveal their role to the town and cancel daytime voting for tomorrow.' },
       priest: { name: 'Priest', team: 'village', stackable: false, desc: 'Once per game, splash holy water: if target is werewolf they die, otherwise you die.' },
       mayor: { name: 'Mayor', team: 'village', stackable: false, desc: 'Once revealed, your daytime vote counts as 2.' },
@@ -839,9 +836,43 @@
       document.body.className = theme;
     }
 
+    // Role validation to resolve dependencies (Seer Apprentice -> Seer, Sect Hunter -> Sect Leader, Siblings >= 2)
+    function sanitizeRoleDependencies(rolesList, total) {
+      let roles = [...rolesList];
+
+      // 1. Seer Apprentice requires Seer
+      if (roles.includes('seer_apprentice') && !roles.includes('seer')) {
+        const idx = roles.indexOf('seer_apprentice');
+        if (roles.length < total) {
+          roles.push('seer');
+        } else {
+          roles[idx] = 'seer'; // upgrade apprentice to full Seer
+        }
+      }
+
+      // 2. Sect Hunter requires Sect Leader
+      if (roles.includes('sect_hunter') && !roles.includes('sect_leader')) {
+        const idx = roles.indexOf('sect_hunter');
+        roles[idx] = 'villager';
+      }
+
+      // 3. Siblings must be >= 2
+      const sibCount = roles.filter(r => r === 'sibling').length;
+      if (sibCount === 1) {
+        if (roles.length < total) {
+          roles.push('sibling');
+        } else {
+          const idx = roles.indexOf('sibling');
+          roles[idx] = 'villager';
+        }
+      }
+
+      return roles;
+    }
+
     function startGame() {
       const total = state.players.length;
-      const roles = [];
+      let roles = [];
 
       state.settings.firstNightImmunity = $('firstNightImmunity').checked;
       state.settings.allowSkipVotes = $('allowSkipVotes').checked;
@@ -850,6 +881,23 @@
       state.settings.dayTimer = parseInt($('dayTimer').value) || 0;
 
       if (currentMode === 'custom') {
+        const customApprentice = customRoleCounts['seer_apprentice'] || 0;
+        const customSeer = customRoleCounts['seer'] || 0;
+        if (customApprentice > 0 && customSeer === 0) {
+          return alert('Seer Apprentice requires at least 1 Seer. Please add a Seer or remove the Seer Apprentice.');
+        }
+
+        const customSectHunter = customRoleCounts['sect_hunter'] || 0;
+        const customSectLeader = customRoleCounts['sect_leader'] || 0;
+        if (customSectHunter > 0 && customSectLeader === 0) {
+          return alert('Sect Hunter requires a Sect Leader. Please add a Sect Leader or remove the Sect Hunter.');
+        }
+
+        const customSiblings = customRoleCounts['sibling'] || 0;
+        if (customSiblings === 1) {
+          return alert('Siblings must be at least 2 players.');
+        }
+
         Object.keys(ROLES).forEach(key => {
           const count = customRoleCounts[key] || 0;
           for (let i = 0; i < count; i++) roles.push(key);
@@ -867,6 +915,8 @@
         for (let i = 0; i < total - wolfCount && i < specialKeys.length; i++) {
           if (Math.random() > 0.3) roles.push(specialKeys[i]);
         }
+
+        roles = sanitizeRoleDependencies(roles, total);
       } else if (currentMode === 'selected_random') {
         const enabledKeys = Object.keys(ROLES).filter(k => roleToggles[k]);
         if (!enabledKeys.length) return alert('Please enable at least one role!');
@@ -887,14 +937,21 @@
         shuffle(enabledNonWolves);
         enabledNonWolves.forEach(k => {
           if (roles.length >= total) return;
+          // Dependent role pre-filtering
+          if (k === 'seer_apprentice' && !roleToggles['seer']) return;
+          if (k === 'sect_hunter' && !roleToggles['sect_leader']) return;
+
           if (Math.random() < 0.65) {
             const r = ROLES[k];
-            const qty = r.stackable ? Math.min(total - roles.length, Math.floor(Math.random() * 2) + 1) : 1;
+            let qty = r.stackable ? Math.min(total - roles.length, Math.floor(Math.random() * 2) + 1) : 1;
+            if (k === 'sibling') qty = Math.max(2, qty);
             for (let q = 0; q < qty && roles.length < total; q++) {
               roles.push(k);
             }
           }
         });
+
+        roles = sanitizeRoleDependencies(roles, total);
       }
 
       while (roles.length < total) roles.push('villager');
@@ -998,7 +1055,18 @@
       let extra = '';
       if (isWolf(player.role)) {
         const otherWolves = state.players.filter(p => isWolf(p.role) && p.id !== player.id);
-        extra = otherWolves.length > 0 ? `🐺 Fellow Werewolves: <strong>${otherWolves.map(w => w.name).join(', ')}</strong>` : `🐺 You are the only Werewolf.`;
+        if (otherWolves.length > 0) {
+          const wolfEntries = otherWolves.map(w => {
+            if (w.alive) {
+              return `<strong>${w.name}</strong> <span style="color:var(--neon-safe); font-size:0.75rem;">(Alive)</span>`;
+            } else {
+              return `<del style="opacity:0.55;">${w.name}</del> <span style="color:var(--neon-wolf); font-size:0.75rem;">(Dead ☠️)</span>`;
+            }
+          }).join(', ');
+          extra = `🐺 Fellow Werewolves: ${wolfEntries}`;
+        } else {
+          extra = `🐺 You are the only Werewolf.`;
+        }
       } else if (player.role === 'sibling') {
         const otherSiblings = state.players.filter(p => p.role === 'sibling' && p.id !== player.id);
         extra = `👥 Siblings: <strong>${otherSiblings.length ? otherSiblings.map(s => s.name).join(', ') : 'None'}</strong>`;
@@ -1088,8 +1156,11 @@
           actHtml += `<label><strong>Select/Update who you drag down with you if you die:</strong></label>`;
           actHtml += `<select id="avengerSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         }
-        // SEER & SEER APPRENTICE
-        else if (player.role === 'seer' || (player.role === 'seer_apprentice' && !alivePlayers().some(x => x.role === 'seer'))) {
+        // SEER & ACTIVE SEER APPRENTICE
+        else if (player.role === 'seer' || (player.role === 'seer_apprentice' && !state.players.some(x => x.role === 'seer' && x.alive))) {
+          if (player.role === 'seer_apprentice') {
+            actHtml += `<p class="center" style="color:var(--neon-village); margin-bottom:0.6rem;">🔮 <strong>The true Seer has fallen! You have taken the mantle of the Seer.</strong></p>`;
+          }
           const seen = state.seenBySeer[player.id] || [];
           const eligibleTargets = otherLiving.filter(p => !seen.includes(p.id));
 
@@ -1101,6 +1172,13 @@
             actHtml += `<p class="muted center">You have already investigated all living players.</p>`;
             isPassive = true;
           }
+        }
+        // INACTIVE SEER APPRENTICE (Seer is still alive)
+        else if (player.role === 'seer_apprentice') {
+          const livingSeer = state.players.find(x => x.role === 'seer' && x.alive);
+          actHtml += `<p class="center" style="margin: 0.5rem 0;">🔮 <strong>You are apprenticing under the Seer${livingSeer ? ` (${livingSeer.name})` : ''}.</strong></p>`;
+          actHtml += `<p class="muted center" style="font-size:0.85rem;">You will awaken and inherit divination powers once the true Seer falls.</p>`;
+          isPassive = true;
         }
         // AURA SEER
         else if (player.role === 'aura_seer') {
@@ -1388,9 +1466,17 @@
       if (r === 'witch' && (!state.witchHealUsed || !state.witchPoisonUsed)) return true;
       if (r === 'priest' && !player.usedOneTime) return true;
       if (r === 'medium' && !player.usedOneTime && state.players.some(p => !p.alive)) return true;
-      if (r === 'seer' || (r === 'seer_apprentice' && !alivePlayers().some(x => x.role === 'seer'))) {
+      if (r === 'seer') {
         const seen = state.seenBySeer[player.id] || [];
         return alivePlayers().some(p => p.id !== player.id && !seen.includes(p.id));
+      }
+      if (r === 'seer_apprentice') {
+        const seerAlive = state.players.some(x => x.role === 'seer' && x.alive);
+        if (!seerAlive) {
+          const seen = state.seenBySeer[player.id] || [];
+          return alivePlayers().some(p => p.id !== player.id && !seen.includes(p.id));
+        }
+        return false;
       }
       if (r === 'aura_seer') return true;
       if (r === 'detective') return true;
