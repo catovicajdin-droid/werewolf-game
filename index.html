@@ -732,6 +732,7 @@
         protectId: null,
         bodyguardId: null,
         serialKillId: null,
+        witchHealId: null,
         witchPoisonId: null,
         arsonistAction: null,
         sectLeaderTarget: null,
@@ -763,6 +764,19 @@
       $('hubActionBtn').textContent = `I am ${player.name} — Open My Screen`;
       $('hubActionBtn').onclick = () => showNightPlayerTurn(player);
       switchScreen('passhub');
+    }
+
+    function getTentativeWolfTarget() {
+      let maxVotes = 0, candidates = [];
+      Object.entries(state.nightWolfVotes).forEach(([id, count]) => {
+        if (count > maxVotes) {
+          maxVotes = count;
+          candidates = [parseFloat(id)];
+        } else if (count === maxVotes) {
+          candidates.push(parseFloat(id));
+        }
+      });
+      return candidates.length > 0 ? candidates[0] : null;
     }
 
     function showNightPlayerTurn(player) {
@@ -841,7 +855,7 @@
           actHtml += `<select id="juniorSelect"><option value="">Select target to drag down if you die...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         }
       }
-      // AVENGER: Nightly target selection
+      // AVENGER
       else if (player.role === 'avenger') {
         const curTarget = state.avengerTargets[player.id];
         const curName = curTarget ? state.players.find(p => p.id === curTarget)?.name : 'None';
@@ -849,7 +863,7 @@
         actHtml += `<label><strong>Select/Update who you drag down with you if you die:</strong></label>`;
         actHtml += `<select id="avengerSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
-      // SEER & SEER APPRENTICE
+      // SEER & SEER APPRENTICE (Enabled on Night 1 and all nights)
       else if (player.role === 'seer' || (player.role === 'seer_apprentice' && !alivePlayers().some(x => x.role === 'seer'))) {
         actHtml += `<label><strong>Investigate a Player's Exact Secret Role:</strong></label>`;
         actHtml += `<select id="seerSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
@@ -878,11 +892,27 @@
         actHtml += `<label><strong>Select a Player to Bodyguard (You die in their place if attacked):</strong></label>`;
         actHtml += `<select id="bodyguardProtectSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
-      // WITCH
+      // WITCH (Heal Potion + Poison Potion)
       else if (player.role === 'witch') {
         actHtml += `<p class="muted" style="margin-bottom:0.4rem;">Potions: Heal: <strong>${state.witchHealUsed ? 'Used' : 'Available'}</strong> | Poison: <strong>${state.witchPoisonUsed ? 'Used' : 'Available'}</strong></p>`;
+
+        const tentativeVictimId = getTentativeWolfTarget();
+        const tentativeVictim = tentativeVictimId ? state.players.find(p => p.id === tentativeVictimId) : null;
+
+        if (!state.witchHealUsed) {
+          if (tentativeVictim) {
+            actHtml += `<div class="card" style="padding:0.6rem; border-color:var(--safe); margin-bottom:0.6rem;">`;
+            actHtml += `<p style="font-size:0.85rem;">🐺 <strong>${tentativeVictim.name}</strong> is currently targeted by Werewolves!</p>`;
+            actHtml += `<label><input type="checkbox" id="witchHealCheck" style="width:auto; margin-right:0.4rem;"> <strong>Use Heal Potion to save ${tentativeVictim.name}</strong></label>`;
+            actHtml += `</div>`;
+          } else {
+            actHtml += `<label><strong>Use Heal Potion (Shield a player from tonight's wolf attack):</strong></label>`;
+            actHtml += `<select id="witchHealTarget"><option value="">Do not heal anyone</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+          }
+        }
+
         if (!state.witchPoisonUsed) {
-          actHtml += `<label><strong>Poison a Player (Optional):</strong></label>`;
+          actHtml += `<label style="margin-top:0.4rem;"><strong>Poison a Player (Optional):</strong></label>`;
           actHtml += `<select id="witchPoisonSelect"><option value="">Do not poison anyone</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         }
       }
@@ -1052,6 +1082,16 @@
         if ($('bodyguardProtectSelect') && $('bodyguardProtectSelect').value) {
           state.nightActions.bodyguardId = { guardId: player.id, targetId: parseFloat($('bodyguardProtectSelect').value) };
         }
+        if ($('witchHealCheck') && $('witchHealCheck').checked) {
+          const tentativeVictimId = getTentativeWolfTarget();
+          if (tentativeVictimId) {
+            state.nightActions.witchHealId = tentativeVictimId;
+            state.witchHealUsed = true;
+          }
+        } else if ($('witchHealTarget') && $('witchHealTarget').value) {
+          state.nightActions.witchHealId = parseFloat($('witchHealTarget').value);
+          state.witchHealUsed = true;
+        }
         if ($('witchPoisonSelect') && $('witchPoisonSelect').value) {
           state.nightActions.witchPoisonId = parseFloat($('witchPoisonSelect').value);
           state.witchPoisonUsed = true;
@@ -1146,7 +1186,7 @@
         }
       }
 
-      // Werewolf victim processing
+      // EXACTLY 1 WEREWOLF PACK KILL RESOLUTION
       let maxVotes = 0, wolfVictims = [];
       Object.entries(state.nightWolfVotes).forEach(([id, count]) => {
         if (count > maxVotes) {
@@ -1171,6 +1211,8 @@
           } else if (victim.role === 'tough_guy') {
             state.toughGuyAttacked = victim.id;
             log(`Tough Guy was attacked at night but hung on until tomorrow!`);
+          } else if (state.nightActions.witchHealId === victim.id) {
+            log(`The Witch used her Heal Potion and saved ${victim.name} from the Werewolves!`);
           } else if (state.nightActions.bodyguardId && state.nightActions.bodyguardId.targetId === victim.id) {
             deadQueue.add(state.nightActions.bodyguardId.guardId);
             log(`Bodyguard took the fatal blow for their protected target!`);
@@ -1254,7 +1296,6 @@
           const living = state.players.filter(x => x.alive && x.id !== p.id);
           const pIndex = state.players.findIndex(x => x.id === p.id);
           if (living.length > 0) {
-            // Find adjacent seated neighbors
             for (let i = 1; i < state.players.length; i++) {
               const left = state.players[(pIndex - i + state.players.length) % state.players.length];
               if (left.alive) { queue.push(left.id); break; }
