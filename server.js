@@ -330,7 +330,7 @@ async function handleMessage(ws, msg) {
       ws.roomCode = room.code;
       ws.playerId = id;
 
-      send(ws, { type: 'player:joined', playerId: id, token, roomCode: room.code });
+      send(ws, { type: 'player:joined', playerId: id, token, roomCode: room.code, name });
       broadcastRoster(room);
       break;
     }
@@ -347,7 +347,7 @@ async function handleMessage(ws, msg) {
       ws.roomCode = room.code;
       ws.playerId = player.id;
 
-      send(ws, { type: 'player:joined', playerId: player.id, token: player.token, roomCode: room.code });
+      send(ws, { type: 'player:joined', playerId: player.id, token: player.token, roomCode: room.code, name: player.name });
       if (player.role) {
         const r = ROLES[player.role];
         send(ws, {

@@ -72,21 +72,30 @@
     const prefillRoom = (params.get('room') || '').toUpperCase();
     if (prefillRoom) $('roomCodeInput').value = prefillRoom;
 
+    // sessionStorage, not localStorage: it's isolated per browser TAB
+    // (localStorage is shared across every tab of the same origin, which
+    // breaks badly if more than one player.html tab is open on the same
+    // device/browser - each tab would silently overwrite the others'
+    // reconnect token under the same room-scoped key, and a dropped
+    // socket could reconnect as the WRONG player). Real separate devices
+    // each have their own storage regardless, so this only changes
+    // behavior for same-device multi-tab testing.
     function seatKey(roomCode) { return `werewolf_seat_${roomCode}`; }
     function loadSeat(roomCode) {
-      try { return JSON.parse(localStorage.getItem(seatKey(roomCode))); } catch { return null; }
+      try { return JSON.parse(sessionStorage.getItem(seatKey(roomCode))); } catch { return null; }
     }
     function saveSeat(roomCode, seat) {
-      try { localStorage.setItem(seatKey(roomCode), JSON.stringify(seat)); } catch { /* private mode etc. */ }
+      try { sessionStorage.setItem(seatKey(roomCode), JSON.stringify(seat)); } catch { /* private mode etc. */ }
     }
     function clearSeat(roomCode) {
-      try { localStorage.removeItem(seatKey(roomCode)); } catch { /* ignore */ }
+      try { sessionStorage.removeItem(seatKey(roomCode)); } catch { /* ignore */ }
     }
 
     let ws = null;
     let myName = '';
     let myRoomCode = '';
     let pendingRejoinSeat = null;
+    let haveRole = false;
 
     function connect() {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -108,15 +117,21 @@
 
         if (msg.type === 'player:joined') {
           myRoomCode = msg.roomCode;
+          myName = msg.name || myName;
           saveSeat(myRoomCode, { roomCode: msg.roomCode, playerId: msg.playerId, token: msg.token });
           $('waitingName').textContent = myName;
-          switchScreen('screen-waiting');
+          // Only force the lobby screen on a fresh join. On a reconnect
+          // that already had a role, a role:assign is on its way right
+          // behind this message - jumping to "waiting" first just flashes
+          // the wrong screen before flipping back to the role.
+          if (!haveRole) switchScreen('screen-waiting');
         } else if (msg.type === 'room:roster') {
           $('playerCount').textContent = msg.players.length;
           $('rosterList').innerHTML = msg.players.map(p => `
             <li><span><span class="status-dot ${p.connected ? '' : 'offline'}"></span>${p.name}</span></li>
           `).join('');
         } else if (msg.type === 'role:assign') {
+          haveRole = true;
           renderRole(msg);
           switchScreen('screen-reveal');
         } else if (msg.type === 'room:kicked') {
@@ -199,6 +214,7 @@
     $('backToJoinBtn').addEventListener('click', () => {
       myRoomCode = '';
       pendingRejoinSeat = null;
+      haveRole = false;
       switchScreen('screen-join');
     });
 
