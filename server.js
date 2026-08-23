@@ -343,6 +343,15 @@ async function handleMessage(ws, msg) {
         return send(ws, { type: 'room:error', message: 'Could not reconnect you to that seat.' });
       }
 
+      // If this seat already has a different live connection, that old one
+      // is about to be orphaned (e.g. two tabs somehow ended up sharing the
+      // same reconnect token). Tell it plainly instead of letting it just
+      // silently stop receiving messages, which is much harder to notice.
+      if (player.ws && player.ws !== ws && player.ws.readyState === player.ws.OPEN) {
+        send(player.ws, { type: 'room:kicked', reason: 'seat-reclaimed' });
+        player.ws.close();
+      }
+
       player.ws = ws;
       ws.roomCode = room.code;
       ws.playerId = player.id;

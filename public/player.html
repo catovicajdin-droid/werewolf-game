@@ -119,6 +119,11 @@
           myRoomCode = msg.roomCode;
           myName = msg.name || myName;
           saveSeat(myRoomCode, { roomCode: msg.roomCode, playerId: msg.playerId, token: msg.token });
+          // Reflect the room in the address bar regardless of how we got
+          // here (typed code vs. QR link), so a later reload of THIS tab
+          // always has a room to auto-rejoin with instead of landing back
+          // on a blank join form with no way back into an already-taken name.
+          history.replaceState(null, '', `${location.pathname}?room=${myRoomCode}`);
           $('waitingName').textContent = myName;
           // Only force the lobby screen on a fresh join. On a reconnect
           // that already had a role, a role:assign is on its way right
@@ -136,7 +141,11 @@
           switchScreen('screen-reveal');
         } else if (msg.type === 'room:kicked') {
           clearSeat(myRoomCode);
-          showError('You were removed from the room by the host.');
+          if (msg.reason === 'seat-reclaimed') {
+            showError('Your seat was just opened in another tab or device, so this one has been disconnected. If that was you, use the other tab. If not, something joined using your seat\'s link - rejoin with a fresh link.');
+          } else {
+            showError('You were removed from the room by the host.');
+          }
         } else if (msg.type === 'room:error') {
           if ($('screen-join').classList.contains('active')) {
             $('joinError').textContent = msg.message;
