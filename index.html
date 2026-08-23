@@ -1022,7 +1022,11 @@
         silencedTarget: null,
         redLadyStay: null,
         kittenBiteId: null,
-        reviveId: null
+        reviveId: null,
+        marksmanExecute: null,
+        gunnerShot: null,
+        vigilanteAction: null,
+        mayorRevealedThisTurn: false
       };
 
       state.turnIndex = 0;
@@ -1196,8 +1200,8 @@
         // DETECTIVE
         else if (player.role === 'detective') {
           actHtml += `<label><strong>Compare Team of Two Players:</strong></label>`;
-          actHtml += `<select id="det1"><option value="">Player 1...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
-          actHtml += `<select id="det2"><option value="">Player 2...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+          actHtml += `<select id="det1"><option value="">Player 1...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+          actHtml += `<select id="det2"><option value="">Player 2...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
           actHtml += `<div id="detResult" style="margin:0.4rem 0;"></div><button type="button" class="secondary" id="detInspectBtn">Compare Teams</button>`;
         }
         // DOCTOR
@@ -1282,8 +1286,8 @@
         // CUPID (Night 1)
         else if (player.role === 'cupid' && state.round === 1 && !state.lovers) {
           actHtml += `<label><strong>Bind Two Lovers for the Match:</strong></label>`;
-          actHtml += `<select id="cupidLover1"><option value="">Lover 1...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
-          actHtml += `<select id="cupidLover2"><option value="">Lover 2...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+          actHtml += `<select id="cupidLover1"><option value="">Lover 1...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+          actHtml += `<select id="cupidLover2"><option value="">Lover 2...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         }
         // GRUMPY GRANDMA
         else if (player.role === 'grumpy_grandma') {
@@ -1298,21 +1302,40 @@
         // NAUGHTY BOY
         else if (player.role === 'naughty_boy' && !player.usedOneTime) {
           actHtml += `<label><strong>Swap Roles of Two Players (Once per game):</strong></label>`;
-          actHtml += `<select id="swap1"><option value="">Player 1...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
-          actHtml += `<select id="swap2"><option value="">Player 2...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+          actHtml += `<select id="swap1"><option value="">Player 1...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+          actHtml += `<select id="swap2"><option value="">Player 2...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         }
         // BEAST HUNTER
         else if (player.role === 'beast_hunter') {
           actHtml += `<label><strong>Set Delayed Beast Trap:</strong></label>`;
-          actHtml += `<select id="beastTrapSelect"><option value="">Select player to trap...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+          actHtml += `<select id="beastTrapSelect"><option value="">Select player to trap...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         }
         // MARKSMAN
         else if (player.role === 'marksman' && player.arrows > 0) {
           const curTarget = state.marksmanTargets[player.id];
           const curName = curTarget ? state.players.find(p => p.id === curTarget)?.name : 'None';
-          actHtml += `<p class="muted">Arrows: <strong>${player.arrows}</strong> | Current Target: <strong>${curName}</strong></p>`;
-          actHtml += `<label><strong>Mark a Target for Daytime Execution:</strong></label>`;
+          actHtml += `<p class="muted">Arrows: <strong>${player.arrows}</strong> | Current Marked Target: <strong>${curName}</strong></p>`;
+          if (curTarget) {
+            actHtml += `<label style="display:flex; align-items:center; gap:0.6rem; cursor:pointer; margin-bottom:0.5rem;"><input type="checkbox" id="marksmanExecuteCheck" style="width:1.4rem; height:1.4rem; margin:0;"><span>Execute your marked target (<strong>${curName}</strong>) tonight. If they're innocent, you die instead.</span></label>`;
+          }
+          actHtml += `<label><strong>Mark a Different Target (executable on a future night):</strong></label>`;
           actHtml += `<select id="marksmanSelect"><option value="">Keep current target</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        }
+        // GUNNER
+        else if (player.role === 'gunner' && player.bullets > 0) {
+          actHtml += `<p class="muted">Bullets remaining: <strong>${player.bullets}</strong></p>`;
+          actHtml += `<label><strong>Fire at a Player Tonight (Optional):</strong></label>`;
+          actHtml += `<select id="gunnerShootSelect"><option value="">Do not shoot tonight</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        }
+        // VIGILANTE
+        else if (player.role === 'vigilante' && !player.usedOneTime) {
+          actHtml += `<label><strong>Vigilante: Use your bullet to eliminate, or inspect a role instead (cancels voting tomorrow). Pick at most one:</strong></label>`;
+          actHtml += `<select id="vigilanteMode"><option value="">Do nothing tonight</option><option value="kill">Eliminate a target</option><option value="inspect">Inspect a role (cancels voting)</option></select>`;
+          actHtml += `<select id="vigilanteTargetSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        }
+        // MAYOR
+        else if (player.role === 'mayor' && !state.mayorRevealed) {
+          actHtml += `<label style="display:flex; align-items:center; gap:0.6rem; cursor:pointer;"><input type="checkbox" id="mayorRevealCheck" style="width:1.4rem; height:1.4rem; margin:0;"><span><strong>Reveal yourself as Mayor.</strong> Your vote counts as 2 starting tomorrow.</span></label>`;
         }
         else {
           actHtml += `<p class="center" style="margin: 0.5rem 0;">😴 <strong>You sleep peacefully through the night.</strong></p><p class="muted center" style="font-size:0.8rem;">No active night decisions needed.</p>`;
@@ -1368,6 +1391,7 @@
           const t1 = state.players.find(p => p.id === parseFloat(s1.value));
           const t2 = state.players.find(p => p.id === parseFloat(s2.value));
           if (!t1 || !t2) return;
+          if (t1.id === t2.id) return alert('Please select two different players.');
           const team1 = ROLES[t1.role].team;
           const team2 = ROLES[t2.role].team;
           const same = team1 === team2 && (team1 !== 'solo' || t1.role === t2.role);
@@ -1474,6 +1498,9 @@
       if (r === 'pacifist' && !player.usedOneTime) return true;
       if (r === 'naughty_boy' && !player.usedOneTime) return true;
       if (r === 'marksman' && player.arrows > 0) return true;
+      if (r === 'vigilante' && !player.usedOneTime) return true;
+      if (r === 'gunner' && player.bullets > 0) return true;
+      if (r === 'mayor' && !state.mayorRevealed) return true;
       if (r === 'witch' && (!state.witchHealUsed || !state.witchPoisonUsed)) return true;
       if (r === 'priest' && !player.usedOneTime) return true;
       if (r === 'medium' && !player.usedOneTime && state.players.some(p => !p.alive)) return true;
@@ -1525,6 +1552,10 @@
       if ($('nightmareTarget') && $('nightmareTarget').value) return true;
       if ($('kittenBiteSelect') && $('kittenBiteSelect').value) return true;
       if ($('juniorSelect') && $('juniorSelect').value) return true;
+      if ($('marksmanExecuteCheck') && $('marksmanExecuteCheck').checked) return true;
+      if ($('gunnerShootSelect') && $('gunnerShootSelect').value) return true;
+      if ($('vigilanteMode') && $('vigilanteMode').value && $('vigilanteTargetSelect') && $('vigilanteTargetSelect').value) return true;
+      if ($('mayorRevealCheck') && $('mayorRevealCheck').checked) return true;
       return false;
     }
 
@@ -1633,8 +1664,28 @@
       if ($('beastTrapSelect') && $('beastTrapSelect').value) {
         state.beastTrapped = parseFloat($('beastTrapSelect').value);
       }
+      if ($('marksmanExecuteCheck') && $('marksmanExecuteCheck').checked) {
+        state.nightActions.marksmanExecute = { marksmanId: player.id, targetId: state.marksmanTargets[player.id] };
+        player.arrows--;
+      }
       if ($('marksmanSelect') && $('marksmanSelect').value) {
         state.marksmanTargets[player.id] = parseFloat($('marksmanSelect').value);
+      }
+      if ($('gunnerShootSelect') && $('gunnerShootSelect').value) {
+        state.nightActions.gunnerShot = { gunnerId: player.id, targetId: parseFloat($('gunnerShootSelect').value) };
+        player.bullets--;
+      }
+      if ($('vigilanteMode') && $('vigilanteMode').value && $('vigilanteTargetSelect') && $('vigilanteTargetSelect').value) {
+        state.nightActions.vigilanteAction = {
+          vigId: player.id,
+          targetId: parseFloat($('vigilanteTargetSelect').value),
+          mode: $('vigilanteMode').value
+        };
+        player.usedOneTime = true;
+      }
+      if ($('mayorRevealCheck') && $('mayorRevealCheck').checked) {
+        state.mayorRevealed = true;
+        state.nightActions.mayorRevealedThisTurn = true;
       }
 
       state.turnIndex++;
@@ -1692,6 +1743,42 @@
             deaths.push({ id: state.nightActions.bodyguardId.guardId, reason: 'Killed protecting target as Bodyguard' });
           } else if (victim.role !== 'wise_man' && victim.id !== state.nightActions.protectId) {
             deaths.push({ id: victim.id, reason: 'Eliminated by Werewolves' });
+          }
+        }
+      }
+
+      if (state.nightActions.marksmanExecute && state.nightActions.marksmanExecute.targetId) {
+        const { marksmanId, targetId } = state.nightActions.marksmanExecute;
+        const m = state.players.find(p => p.id === marksmanId);
+        const tgt = state.players.find(p => p.id === targetId);
+        if (m && tgt) {
+          if (isEvil(tgt.role)) {
+            deaths.push({ id: tgt.id, reason: `Shot by Marksman (${m.name})` });
+          } else {
+            deaths.push({ id: m.id, reason: `Misfired upon innocent player (${tgt.name})` });
+          }
+          state.marksmanTargets[marksmanId] = null;
+        }
+      }
+
+      if (state.nightActions.gunnerShot) {
+        const { gunnerId, targetId } = state.nightActions.gunnerShot;
+        const g = state.players.find(p => p.id === gunnerId);
+        const tgt = state.players.find(p => p.id === targetId);
+        if (g && tgt) {
+          deaths.push({ id: tgt.id, reason: `Shot by Gunner (${g.name})` });
+        }
+      }
+
+      if (state.nightActions.vigilanteAction) {
+        const { vigId, targetId, mode } = state.nightActions.vigilanteAction;
+        const v = state.players.find(p => p.id === vigId);
+        const tgt = state.players.find(p => p.id === targetId);
+        if (v && tgt) {
+          if (mode === 'kill') {
+            deaths.push({ id: tgt.id, reason: `Eliminated by Vigilante (${v.name})` });
+          } else if (mode === 'inspect') {
+            state.votingDisabledThisRound = true;
           }
         }
       }
@@ -1829,6 +1916,50 @@
         }
       }
 
+      if (state.nightActions.mayorRevealedThisTurn) {
+        const mayor = state.players.find(p => p.role === 'mayor');
+        if (mayor) {
+          html += `
+            <div class="card" style="padding:0.85rem; border-color:var(--neon-solo); background:rgba(251,191,36,0.1); margin-bottom:0.75rem;">
+              <strong style="color:var(--neon-solo);">🎖️ ${mayor.name} has revealed themselves as the Mayor!</strong>
+              <div class="muted" style="font-size:0.8rem; margin-top:0.2rem;">Their vote now counts as 2 for the rest of the game.</div>
+            </div>
+          `;
+        }
+      }
+
+      if (state.nightActions.gunnerShot) {
+        const g = state.players.find(p => p.id === state.nightActions.gunnerShot.gunnerId);
+        if (g) {
+          html += `
+            <div class="card" style="padding:0.85rem; border-color:var(--neon-village); background:rgba(56,189,248,0.1); margin-bottom:0.75rem;">
+              <strong style="color:var(--neon-village);">🔫 ${g.name} revealed themselves as the Gunner and fired a shot!</strong>
+            </div>
+          `;
+        }
+      }
+
+      if (state.nightActions.marksmanExecute && state.nightActions.marksmanExecute.targetId) {
+        const m = state.players.find(p => p.id === state.nightActions.marksmanExecute.marksmanId);
+        const tgt = state.players.find(p => p.id === state.nightActions.marksmanExecute.targetId);
+        if (m && tgt) {
+          html += `
+            <div class="card" style="padding:0.85rem; border-color:var(--neon-solo); background:rgba(251,191,36,0.1); margin-bottom:0.75rem;">
+              <strong style="color:var(--neon-solo);">🎯 ${m.name} the Marksman executed their marked target, ${tgt.name}!</strong>
+            </div>
+          `;
+        }
+      }
+
+      if (state.nightActions.vigilanteAction && state.nightActions.vigilanteAction.mode === 'inspect') {
+        html += `
+          <div class="card" style="padding:0.85rem; border-color:var(--neon-village); background:rgba(56,189,248,0.1); margin-bottom:0.75rem;">
+            <strong style="color:var(--neon-village);">🔍 The Vigilante inspected a role last night.</strong>
+            <div class="muted" style="font-size:0.8rem; margin-top:0.2rem;">Voting is cancelled today.</div>
+          </div>
+        `;
+      }
+
       if (killed.length) {
         html += killed.map(p => `<p class="center" style="margin:0.5rem 0;">☠️ <strong>${p.name}</strong> died during the night.</p>`).join('');
       } else {
@@ -1863,8 +1994,6 @@
       } else if (state.votingDisabledThisRound) {
         html += `<p class="center" style="color:var(--neon-safe); margin:0.5rem 0;">🔍 Voting is cancelled today due to the Vigilante's inspection.</p>`;
       }
-
-      html += renderDayActionTriggers();
 
       if (currentSecs > 0) {
         html += `<div class="big center" id="timerDisplay" style="color:var(--neon-solo); margin:1.25rem 0; font-size: 2rem; font-weight: 800; text-shadow:0 0 15px var(--neon-solo-glow);">${Math.floor(currentSecs / 60)}:${(currentSecs % 60).toString().padStart(2, '0')}</div>`;
@@ -1901,134 +2030,6 @@
         };
       }
     }
-
-    function renderDayActionTriggers() {
-      const living = alivePlayers();
-      let html = '';
-
-      const marksmen = living.filter(p => p.role === 'marksman' && state.marksmanTargets[p.id]);
-      marksmen.forEach(m => {
-        const tgt = state.players.find(p => p.id === state.marksmanTargets[m.id] && p.alive);
-        if (tgt) {
-          html += `
-            <div class="card" style="padding:0.75rem; border-color:var(--neon-solo); margin-bottom:0.6rem;">
-              <p style="font-size:0.85rem;">🎯 <strong>Marksman Action (${m.name}):</strong> Target locked on <strong>${tgt.name}</strong>.</p>
-              <button class="danger" style="margin-top:0.4rem; padding:0.5rem;" onclick="triggerMarksmanShoot(${m.id}, ${tgt.id})">Execute Marksman Shot</button>
-            </div>
-          `;
-        }
-      });
-
-      const gunners = living.filter(p => p.role === 'gunner' && p.bullets > 0);
-      gunners.forEach(g => {
-        html += `
-          <div class="card" style="padding:0.75rem; border-color:var(--neon-village); margin-bottom:0.6rem;">
-            <p style="font-size:0.85rem;">🔫 <strong>Gunner (${g.name})</strong> has ${g.bullets} bullet(s) remaining.</p>
-            <select id="gunnerTgt_${g.id}"><option value="">Select player to shoot...</option>${living.filter(p => p.id !== g.id).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>
-            <button class="danger" style="margin-top:0.4rem; padding:0.5rem;" onclick="triggerGunnerShoot(${g.id})">Fire Gunner Shot</button>
-          </div>
-        `;
-      });
-
-      const vigs = living.filter(p => p.role === 'vigilante' && !p.usedOneTime);
-      vigs.forEach(v => {
-        html += `
-          <div class="card" style="padding:0.75rem; border-color:var(--neon-village); margin-bottom:0.6rem;">
-            <p style="font-size:0.85rem;">🛡️ <strong>Vigilante (${v.name}):</strong> Use your 1 bullet to eliminate, or inspect a role instead (cancels voting today). Choose one.</p>
-            <select id="vigTgt_${v.id}"><option value="">Select target...</option>${living.filter(p => p.id !== v.id).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>
-            <div class="grid-2">
-              <button class="danger" style="margin-top:0.4rem; padding:0.5rem;" onclick="triggerVigilanteAction(${v.id})">Take Vigilante Shot</button>
-              <button class="secondary" style="margin-top:0.4rem; padding:0.5rem;" onclick="triggerVigilanteInspect(${v.id})">Inspect Instead</button>
-            </div>
-          </div>
-        `;
-      });
-
-      const mayors = living.filter(p => p.role === 'mayor' && !state.mayorRevealed);
-      mayors.forEach(m => {
-        html += `
-          <div class="card" style="padding:0.75rem; border-color:var(--neon-solo); margin-bottom:0.6rem;">
-            <p style="font-size:0.85rem;">🎖️ <strong>${m.name}</strong> may reveal as Mayor. Once revealed, your vote counts as 2 for the rest of the game.</p>
-            <button class="warning" style="margin-top:0.4rem; padding:0.5rem;" onclick="triggerMayorReveal(${m.id})">Reveal as Mayor</button>
-          </div>
-        `;
-      });
-
-      return html;
-    }
-
-    window.triggerMarksmanShoot = function(mId, tgtId) {
-      const m = state.players.find(p => p.id === mId);
-      const tgt = state.players.find(p => p.id === tgtId);
-      if (!m || !tgt || !m.alive || !tgt.alive) return;
-
-      m.arrows--;
-      state.marksmanTargets[mId] = null;
-
-      const targetEvil = isEvil(tgt.role);
-      const dead = [];
-
-      if (targetEvil) {
-        dead.push({ id: tgt.id, reason: `Shot by Marksman (${m.name})` });
-        alert(`🎯 Shot fired! ${tgt.name} was EVIL and was eliminated!`);
-      } else {
-        dead.push({ id: m.id, reason: `Misfired upon innocent player (${tgt.name})` });
-        alert(`❌ Shot fired! ${tgt.name} was an innocent villager. Marksman (${m.name}) died from guilt!`);
-      }
-
-      processCasualties(dead);
-      if (!checkWin()) runDayPhase();
-    };
-
-    window.triggerGunnerShoot = function(gId) {
-      const g = state.players.find(p => p.id === gId);
-      const sel = $(`gunnerTgt_${gId}`);
-      if (!g || !sel || !sel.value) return alert('Select a target to shoot.');
-      const tgtId = parseFloat(sel.value);
-      const tgt = state.players.find(p => p.id === tgtId);
-      if (!tgt) return;
-
-      g.bullets--;
-      alert(`💥 BANG! Gunner ${g.name} revealed their role and shot ${tgt.name}!`);
-      processCasualties([{ id: tgt.id, reason: `Shot by Gunner (${g.name})` }]);
-      if (!checkWin()) runDayPhase();
-    };
-
-    window.triggerVigilanteAction = function(vId) {
-      const v = state.players.find(p => p.id === vId);
-      const sel = $(`vigTgt_${vId}`);
-      if (!v || !sel || !sel.value) return alert('Select a target.');
-      const tgtId = parseFloat(sel.value);
-      const tgt = state.players.find(p => p.id === tgtId);
-      if (!tgt) return;
-
-      v.usedOneTime = true;
-      alert(`💥 Vigilante ${v.name} eliminated ${tgt.name}!`);
-      processCasualties([{ id: tgt.id, reason: `Eliminated by Vigilante (${v.name})` }]);
-      if (!checkWin()) runDayPhase();
-    };
-
-    window.triggerVigilanteInspect = function(vId) {
-      const v = state.players.find(p => p.id === vId);
-      const sel = $(`vigTgt_${vId}`);
-      if (!v || !sel || !sel.value) return alert('Select a target to inspect.');
-      const tgtId = parseFloat(sel.value);
-      const tgt = state.players.find(p => p.id === tgtId);
-      if (!tgt) return;
-
-      v.usedOneTime = true;
-      state.votingDisabledThisRound = true;
-      alert(`🔍 Vigilante ${v.name} secretly inspected ${tgt.name}: they are ${ROLES[tgt.role].name}. Voting is cancelled for the rest of today.`);
-      runDayPhase();
-    };
-
-    window.triggerMayorReveal = function(id) {
-      const m = state.players.find(p => p.id === id);
-      if (!m) return;
-      state.mayorRevealed = true;
-      alert(`🎖️ ${m.name} has revealed themselves as the Mayor! Their vote now counts as 2 for the rest of the game.`);
-      runDayPhase();
-    };
 
     function showDayVoteHub() {
       const living = alivePlayers();
