@@ -6,195 +6,327 @@
   <title>Werewolf: Ultimate Edition</title>
   <style>
     :root {
-      --bg: #090d16;
-      --surface: #131926;
-      --surface-2: #1f293d;
-      --surface-3: #2d3b57;
-      --text: #f8fafc;
-      --muted: #94a3b8;
-      --wolf: #ef4444;
-      --village: #3b82f6;
-      --solo: #f59e0b;
-      --special: #8b5cf6;
-      --safe: #10b981;
-      --border: #334155;
+      --bg-base: #060913;
+      --bg-gradient: radial-gradient(circle at 50% 0%, #151d38 0%, #080c1a 50%, #03050c 100%);
+
+      --glass-surface: rgba(15, 23, 42, 0.75);
+      --glass-surface-2: rgba(30, 41, 59, 0.65);
+      --glass-surface-3: rgba(51, 65, 85, 0.6);
+      --glass-border: rgba(255, 255, 255, 0.12);
+      --glass-border-bright: rgba(255, 255, 255, 0.25);
+
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+
+      --neon-wolf: #f43f5e;
+      --neon-wolf-glow: rgba(244, 63, 94, 0.35);
+
+      --neon-village: #38bdf8;
+      --neon-village-glow: rgba(56, 189, 248, 0.3);
+
+      --neon-solo: #fbbf24;
+      --neon-solo-glow: rgba(251, 191, 36, 0.3);
+
+      --neon-special: #c084fc;
+      --neon-special-glow: rgba(192, 132, 252, 0.35);
+
+      --neon-safe: #34d399;
+      --neon-safe-glow: rgba(52, 211, 153, 0.3);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      background: var(--bg-base);
+      background-image: var(--bg-gradient);
+      background-attachment: fixed;
+      color: var(--text-main);
       min-height: 100vh;
-      padding: 1rem;
-      line-height: 1.4;
+      padding: 1.25rem 1rem;
+      line-height: 1.5;
+      transition: background 0.5s ease;
+    }
+
+    /* Ambient Phase Theming */
+    body.theme-night {
+      background-image: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #09091f 50%, #02020a 100%);
+    }
+    body.theme-day {
+      background-image: radial-gradient(circle at 50% 0%, #2e1065 0%, #17153a 50%, #05060f 100%);
+    }
+    body.theme-blood {
+      background-image: radial-gradient(circle at 50% 0%, #4c0519 0%, #1a040b 50%, #050103 100%);
     }
 
     .container { max-width: 580px; margin: 0 auto; }
     .screen { display: none; }
-    .screen.active { display: block; }
+    .screen.active { display: block; animation: fadeIn 0.25s ease-out; }
 
-    h1, h2, h3 { text-align: center; margin-bottom: 0.75rem; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
 
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      text-align: center;
+      margin-bottom: 1.25rem;
+      background: linear-gradient(135deg, #ffffff 0%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 30px rgba(56, 189, 248, 0.2);
+    }
+
+    h2, h3 { text-align: center; margin-bottom: 0.75rem; font-weight: 700; }
+
+    /* Glass Tabs */
     .tabs {
       display: flex;
-      gap: 0.35rem;
-      margin-bottom: 1rem;
-      background: var(--surface);
-      padding: 0.25rem;
-      border-radius: 10px;
+      gap: 0.4rem;
+      margin-bottom: 1.25rem;
+      background: var(--glass-surface);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      padding: 0.35rem;
+      border-radius: 14px;
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
     }
 
     .tab-btn {
       flex: 1;
-      padding: 0.6rem 0.2rem;
+      padding: 0.65rem 0.3rem;
       border: none;
       background: transparent;
-      color: var(--muted);
-      border-radius: 8px;
+      color: var(--text-muted);
+      border-radius: 10px;
       font-weight: 600;
       cursor: pointer;
-      font-size: 0.8rem;
+      font-size: 0.85rem;
+      transition: all 0.2s ease;
     }
 
     .tab-btn.active {
-      background: var(--surface-2);
-      color: var(--text);
+      background: var(--glass-surface-2);
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4), inset 0 0 0 1px var(--glass-border-bright);
     }
 
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
+    /* Glass Cards */
     .card {
-      background: var(--surface);
-      border-radius: 12px;
-      padding: 1.25rem;
-      margin-bottom: 1rem;
-      border: 1px solid var(--border);
+      background: var(--glass-surface);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: 16px;
+      padding: 1.35rem;
+      margin-bottom: 1.25rem;
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 10px 40px -10px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08);
+      position: relative;
+      overflow: hidden;
     }
 
     input, button, select {
       font: inherit;
       width: 100%;
-      padding: 0.75rem;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--surface-2);
-      color: var(--text);
-      margin-bottom: 0.5rem;
+      padding: 0.85rem 1rem;
+      border-radius: 12px;
+      border: 1px solid var(--glass-border);
+      background: var(--glass-surface-2);
+      color: var(--text-main);
+      margin-bottom: 0.6rem;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--neon-village);
+      box-shadow: 0 0 16px var(--neon-village-glow);
     }
 
     button {
-      background: var(--village);
+      background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
       border: none;
       cursor: pointer;
-      font-weight: 600;
-      transition: opacity 0.15s;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      box-shadow: 0 4px 18px rgba(37, 99, 235, 0.35);
+      color: #fff;
     }
 
-    button:hover { opacity: 0.9; }
-    button.secondary { background: var(--surface-2); border: 1px solid var(--border); color: var(--text); }
-    button.danger { background: var(--wolf); color: #fff; }
-    button.success { background: var(--safe); color: #000; }
-    button.warning { background: var(--solo); color: #000; }
-    button.purple { background: var(--special); color: #fff; }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.1);
+    }
+    button:active { transform: translateY(0); }
+
+    button.secondary {
+      background: var(--glass-surface-2);
+      border: 1px solid var(--glass-border);
+      color: var(--text-main);
+      box-shadow: none;
+    }
+    button.secondary:hover {
+      background: var(--glass-surface-3);
+      border-color: var(--glass-border-bright);
+    }
+
+    button.danger {
+      background: linear-gradient(135deg, #e11d48 0%, #be123c 100%);
+      color: #fff;
+      box-shadow: 0 4px 20px var(--neon-wolf-glow);
+    }
+
+    button.success {
+      background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+      color: #042f2e;
+      font-weight: 800;
+      box-shadow: 0 4px 20px var(--neon-safe-glow);
+    }
+
+    button.warning {
+      background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
+      color: #451a03;
+      font-weight: 800;
+      box-shadow: 0 4px 20px var(--neon-solo-glow);
+    }
+
+    button.purple {
+      background: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%);
+      color: #fff;
+      box-shadow: 0 4px 20px var(--neon-special-glow);
+    }
+
+    button:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
 
     .toggle-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0.6rem 0;
-      border-bottom: 1px solid var(--surface-2);
+      padding: 0.75rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
     }
-
     .toggle-row:last-child { border-bottom: none; }
-    .toggle-row input[type="checkbox"] { width: 1.3rem; height: 1.3rem; accent-color: var(--village); margin: 0; cursor: pointer; }
+    .toggle-row input[type="checkbox"] { width: 1.4rem; height: 1.4rem; accent-color: var(--neon-village); margin: 0; cursor: pointer; }
 
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
 
     .role-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-      gap: 0.5rem;
-      max-height: 380px;
+      grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+      gap: 0.6rem;
+      max-height: 400px;
       overflow-y: auto;
-      padding-right: 0.25rem;
+      padding-right: 0.35rem;
     }
 
     .role-card {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.5rem;
+      background: var(--glass-surface-2);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 0.65rem;
       font-size: 0.8rem;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
+      transition: all 0.2s ease;
     }
 
-    .role-card.team-wolf { border-color: var(--wolf); }
-    .role-card.team-solo { border-color: var(--solo); }
-    .role-card.team-village { border-color: var(--village); }
+    .role-card:hover {
+      border-color: var(--glass-border-bright);
+      transform: translateY(-2px);
+    }
+
+    .role-card.team-wolf { border-left: 3px solid var(--neon-wolf); }
+    .role-card.team-solo { border-left: 3px solid var(--neon-solo); }
+    .role-card.team-village { border-left: 3px solid var(--neon-village); }
 
     .role-badge {
       display: inline-block;
-      padding: 0.2rem 0.45rem;
+      padding: 0.25rem 0.55rem;
       border-radius: 999px;
       font-size: 0.7rem;
-      font-weight: 700;
+      font-weight: 800;
+      letter-spacing: 0.05em;
       text-transform: uppercase;
     }
 
-    .badge-wolf { background: var(--wolf); color: #fff; }
-    .badge-village { background: var(--village); color: #fff; }
-    .badge-solo { background: var(--solo); color: #000; }
+    .badge-wolf {
+      background: rgba(244, 63, 94, 0.18);
+      color: #fda4af;
+      border: 1px solid rgba(244, 63, 94, 0.4);
+      box-shadow: 0 0 12px var(--neon-wolf-glow);
+    }
+    .badge-village {
+      background: rgba(56, 189, 248, 0.18);
+      color: #bae6fd;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      box-shadow: 0 0 12px var(--neon-village-glow);
+    }
+    .badge-solo {
+      background: rgba(251, 191, 36, 0.18);
+      color: #fde68a;
+      border: 1px solid rgba(251, 191, 36, 0.4);
+      box-shadow: 0 0 12px var(--neon-solo-glow);
+    }
 
     .player-list { list-style: none; }
     .player-list li {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0.4rem 0;
-      border-bottom: 1px solid var(--surface-2);
+      padding: 0.5rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
     }
 
     .center { text-align: center; }
-    .muted { color: var(--muted); font-size: 0.85rem; }
+    .muted { color: var(--text-muted); font-size: 0.85rem; }
     .big { font-size: 1.25rem; font-weight: 700; }
-    .giant { font-size: 1.6rem; font-weight: 800; }
+    .giant { font-size: 1.8rem; font-weight: 900; letter-spacing: 0.02em; }
 
     .privacy-box {
-      border: 2px dashed var(--border);
-      border-radius: 12px;
-      padding: 1.5rem 1rem;
+      border: 2px dashed rgba(255,255,255,0.18);
+      border-radius: 16px;
+      padding: 1.75rem 1.25rem;
       text-align: center;
       margin: 1rem 0;
-      background: rgba(19, 25, 38, 0.6);
+      background: rgba(10, 15, 29, 0.7);
     }
 
     .role-banner {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 0.85rem;
-      margin-bottom: 1rem;
+      background: var(--glass-surface-2);
+      border: 1px solid var(--glass-border-bright);
+      border-radius: 14px;
+      padding: 1.1rem;
+      margin-bottom: 1.25rem;
       text-align: center;
+      box-shadow: inset 0 0 20px rgba(0,0,0,0.3);
     }
 
     .action-box {
-      background: var(--surface-3);
-      border-radius: 10px;
-      padding: 0.85rem;
-      margin-top: 0.75rem;
-      border: 1px solid var(--border);
+      background: var(--glass-surface-3);
+      border-radius: 14px;
+      padding: 1.1rem;
+      margin-top: 0.85rem;
+      border: 1px solid var(--glass-border);
     }
 
     .log {
       font-family: ui-monospace, monospace;
       font-size: 0.8rem;
-      color: var(--muted);
+      color: var(--text-muted);
       max-height: 160px;
       overflow-y: auto;
       white-space: pre-wrap;
@@ -204,7 +336,9 @@
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.85);
+      background: rgba(3, 7, 18, 0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
       align-items: center;
       justify-content: center;
       padding: 1rem;
@@ -212,12 +346,13 @@
     }
     .modal.active { display: flex; }
     .modal-content {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
+      background: var(--glass-surface);
+      border: 1px solid var(--glass-border-bright);
+      border-radius: 18px;
       max-width: 440px;
       width: 100%;
-      padding: 1.5rem;
+      padding: 1.75rem;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.7);
     }
 
     .role-action-bar {
@@ -225,32 +360,34 @@
       align-items: center;
       justify-content: space-between;
       gap: 0.4rem;
-      margin-top: 0.4rem;
+      margin-top: 0.5rem;
     }
 
     .role-toggle-btn {
       flex: 1;
-      padding: 0.35rem 0.2rem;
+      padding: 0.4rem 0.25rem;
       font-size: 0.75rem;
       margin: 0;
-      border-radius: 6px;
-      background: var(--surface-3);
-      color: var(--muted);
+      border-radius: 8px;
+      background: var(--glass-surface-3);
+      color: var(--text-muted);
       cursor: pointer;
+      border: 1px solid transparent;
     }
 
     .role-toggle-btn.active {
-      background: var(--safe);
-      color: #000;
-      font-weight: bold;
+      background: rgba(52, 211, 153, 0.2);
+      color: #6ee7b7;
+      border-color: rgba(52, 211, 153, 0.5);
+      box-shadow: 0 0 10px var(--neon-safe-glow);
     }
 
     .inspection-result-box {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.75rem;
-      margin: 0.5rem 0;
+      background: var(--glass-surface-2);
+      border: 1px solid var(--glass-border-bright);
+      border-radius: 10px;
+      padding: 0.85rem;
+      margin: 0.6rem 0;
       text-align: left;
     }
   </style>
@@ -272,7 +409,7 @@
       <div id="tab-players" class="tab-content active">
         <div class="card">
           <h3>Add Players (Seating Order)</h3>
-          <p class="muted" style="margin-bottom: 0.5rem;">Add players in order around the circle. Enter multiple names separated by commas (e.g. <em>Alex, Sam, Jordan</em>).</p>
+          <p class="muted" style="margin-bottom: 0.6rem;">Add players in order around the circle. Enter multiple names separated by commas (e.g. <em>Alex, Sam, Jordan</em>).</p>
           <input type="text" id="playerName" placeholder="Enter player name(s), comma separated" autocomplete="off">
           <button id="addPlayerBtn">Add Player(s)</button>
           <ul id="playersList" class="player-list"></ul>
@@ -292,11 +429,11 @@
         </div>
 
         <div class="card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
             <h3 style="margin:0;">Roles Setup</h3>
-            <div id="quickToggles" style="display:flex; gap:0.25rem;">
-              <button class="secondary" style="width:auto; padding:0.2rem 0.5rem; font-size:0.75rem; margin:0;" onclick="toggleAllRoles(true)">Enable All</button>
-              <button class="secondary" style="width:auto; padding:0.2rem 0.5rem; font-size:0.75rem; margin:0;" onclick="toggleAllRoles(false)">Disable All</button>
+            <div id="quickToggles" style="display:flex; gap:0.35rem;">
+              <button class="secondary" style="width:auto; padding:0.25rem 0.6rem; font-size:0.75rem; margin:0;" onclick="toggleAllRoles(true)">Enable All</button>
+              <button class="secondary" style="width:auto; padding:0.25rem 0.6rem; font-size:0.75rem; margin:0;" onclick="toggleAllRoles(false)">Disable All</button>
             </div>
           </div>
           <div id="roleGrid" class="role-grid"></div>
@@ -353,7 +490,7 @@
         <h2 id="hubTitle">Pass Device</h2>
         <div class="privacy-box">
           <p class="muted" id="hubSubtitle" style="margin-bottom:0.5rem;">Pass device to player:</p>
-          <div class="giant" id="hubPlayerName" style="color:var(--safe); margin-bottom: 1rem;">Player</div>
+          <div class="giant" id="hubPlayerName" style="color:var(--neon-safe); text-shadow: 0 0 20px var(--neon-safe-glow); margin-bottom: 1rem;">Player</div>
           <p class="muted" id="hubWarning" style="font-size:0.85rem;">Ensure only this player can see the screen before clicking.</p>
         </div>
         <button id="hubActionBtn" class="purple big" style="padding:1rem;">I am [Player] — Open My Screen</button>
@@ -371,7 +508,7 @@
           </div>
           <h3 id="nightTurnRoleTitle" style="margin-top:0.4rem; margin-bottom:0.25rem;"></h3>
           <p id="nightTurnRoleDesc" class="muted" style="font-size:0.85rem; line-height:1.4;"></p>
-          <div id="nightTurnExtraInfo" style="margin-top:0.5rem; font-size:0.85rem; color:var(--solo);"></div>
+          <div id="nightTurnExtraInfo" style="margin-top:0.5rem; font-size:0.85rem; color:var(--neon-solo);"></div>
         </div>
 
         <div id="nightTurnActionArea" class="action-box"></div>
@@ -393,8 +530,8 @@
 
     <!-- GENERAL GAMEPLAY SCREEN -->
     <div id="game" class="screen">
-      <div class="card center" style="margin-bottom:0.5rem; padding:0.6rem;">
-        <span id="phaseIndicator" class="big"></span>
+      <div class="card center" style="margin-bottom:0.5rem; padding:0.75rem;">
+        <span id="phaseIndicator" class="big" style="color:var(--neon-village); text-shadow:0 0 15px var(--neon-village-glow);"></span>
       </div>
       <div id="gameContent" class="card"></div>
       <div class="card log" id="gameLog"></div>
@@ -404,7 +541,7 @@
     <div id="end" class="screen">
       <h1>Game Over</h1>
       <div class="card center">
-        <div class="big" id="winnerText" style="margin-bottom: 1rem;"></div>
+        <div class="big" id="winnerText" style="margin-bottom: 1rem; color:var(--neon-solo); text-shadow:0 0 20px var(--neon-solo-glow);"></div>
         <div id="finalRoles" style="text-align: left; margin: 1rem 0;"></div>
         <div style="display:flex; flex-direction:column; gap:0.5rem; margin-top:1.25rem;">
           <button id="playAgainBtn" class="success big" style="padding:0.9rem;">Play Again (Same Players, Re-rolled Roles)</button>
@@ -698,6 +835,10 @@
       $('gameLog').scrollTop = $('gameLog').scrollHeight;
     }
 
+    function setAmbientTheme(theme) {
+      document.body.className = theme;
+    }
+
     function startGame() {
       const total = state.players.length;
       const roles = [];
@@ -798,6 +939,7 @@
 
     function beginNightPhase() {
       state.phase = 'night';
+      setAmbientTheme('theme-night');
       state.nightWolfVotes = {};
       state.wolfVoteHistory = [];
       state.pacifistRevealTarget = null;
@@ -875,7 +1017,7 @@
       let isPassive = false;
 
       if (state.asleepId === player.id) {
-        actHtml = `<p class="center" style="color:var(--wolf);">You were put to sleep by the Nightmare Werewolf! You cannot perform actions tonight.</p>`;
+        actHtml = `<p class="center" style="color:var(--neon-wolf);">You were put to sleep by the Nightmare Werewolf! You cannot perform actions tonight.</p>`;
         isPassive = true;
       } else {
         const living = alivePlayers();
@@ -887,13 +1029,13 @@
           const nonWolves = living.filter(p => !isWolf(p.role));
 
           if (state.round === 1 && state.settings.firstNightImmunity) {
-            actHtml += `<p class="center" style="color:var(--solo); margin:0.4rem 0;">First Night Kill Protection is ON. Werewolves cannot eliminate tonight.</p>`;
+            actHtml += `<p class="center" style="color:var(--neon-solo); margin:0.4rem 0;">First Night Kill Protection is ON. Werewolves cannot eliminate tonight.</p>`;
           } else {
             if (state.wolfVoteHistory.length > 0) {
               actHtml += `
-                <div class="card" style="padding:0.6rem; margin-bottom:0.6rem; background:rgba(239,68,68,0.1); border-color:var(--wolf);">
-                  <strong style="font-size:0.85rem; color:var(--wolf);">🐺 Earlier Pack Votes Tonight:</strong>
-                  <div style="font-size:0.8rem; margin-top:0.25rem;">
+                <div class="card" style="padding:0.75rem; margin-bottom:0.75rem; background:rgba(244,63,94,0.1); border-color:var(--neon-wolf);">
+                  <strong style="font-size:0.85rem; color:var(--neon-wolf);">🐺 Earlier Pack Votes Tonight:</strong>
+                  <div style="font-size:0.8rem; margin-top:0.35rem;">
                     ${state.wolfVoteHistory.map(v => `<div>• <strong>${v.voterName}</strong> voted for <strong>${v.targetName}</strong></div>`).join('')}
                   </div>
                 </div>
@@ -988,9 +1130,9 @@
           actHtml += `<p class="muted" style="margin-bottom:0.6rem;">Potions: Heal: <strong>${state.witchHealUsed ? 'Used' : 'Available'}</strong> | Poison: <strong>${state.witchPoisonUsed ? 'Used' : 'Available'}</strong></p>`;
 
           if (!state.witchHealUsed) {
-            actHtml += `<div class="card" style="padding:0.75rem; border-color:var(--safe); margin-bottom:0.75rem; background:rgba(16,185,129,0.08);">`;
-            actHtml += `<label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">`;
-            actHtml += `<input type="checkbox" id="witchHealVillageCheck" style="width:1.4rem; height:1.4rem; accent-color:var(--safe); margin:0;">`;
+            actHtml += `<div class="card" style="padding:0.75rem; border-color:var(--neon-safe); margin-bottom:0.75rem; background:rgba(52,211,153,0.08);">`;
+            actHtml += `<label style="display:flex; align-items:center; gap:0.6rem; cursor:pointer;">`;
+            actHtml += `<input type="checkbox" id="witchHealVillageCheck" style="width:1.4rem; height:1.4rem; accent-color:var(--neon-safe); margin:0;">`;
             actHtml += `<span><strong>Use Heal Potion tonight:</strong> Shield the entire village from werewolf attacks for this turn.</span>`;
             actHtml += `</label></div>`;
           }
@@ -1561,6 +1703,7 @@
 
     function showMorning(killed) {
       if (checkWin()) return;
+      setAmbientTheme('theme-dawn');
       $('phaseIndicator').textContent = `Morning ${state.round}`;
       let html = `<h3>Morning ${state.round} Report</h3>`;
 
@@ -1568,8 +1711,8 @@
         const pt = state.players.find(p => p.id === state.pacifistRevealTarget);
         if (pt) {
           html += `
-            <div class="card" style="padding:0.75rem; border-color:var(--safe); background:rgba(16,185,129,0.1); margin-bottom:0.75rem;">
-              <strong style="color:var(--safe);">🕊️ The Pacifist has pacified the village!</strong>
+            <div class="card" style="padding:0.85rem; border-color:var(--neon-safe); background:rgba(52,211,153,0.1); margin-bottom:0.75rem;">
+              <strong style="color:var(--neon-safe);">🕊️ The Pacifist has pacified the village!</strong>
               <div style="margin-top:0.3rem;"><strong>${pt.name}</strong> was revealed to be <span class="role-badge badge-${ROLES[pt.role].team}">${ROLES[pt.role].name}</span>!</div>
               <div class="muted" style="font-size:0.8rem; margin-top:0.2rem;">Daytime voting is cancelled for today.</div>
             </div>
@@ -1592,6 +1735,7 @@
 
     function runDayPhase() {
       state.phase = 'day';
+      setAmbientTheme('theme-day');
       state.dayVotes = {};
       $('phaseIndicator').textContent = `Day ${state.round}`;
 
@@ -1600,18 +1744,17 @@
 
       if (state.silencedId) {
         const s = state.players.find(p => p.id === state.silencedId);
-        if (s) html += `<p class="center" style="color:var(--solo);">🤐 <strong>${s.name}</strong> has been silenced by Grumpy Grandma!</p>`;
+        if (s) html += `<p class="center" style="color:var(--neon-solo);">🤐 <strong>${s.name}</strong> has been silenced by Grumpy Grandma!</p>`;
       }
 
       if (state.pacifistRevealTarget) {
-        html += `<p class="center" style="color:var(--safe); margin:0.5rem 0;">🕊️ Voting is cancelled today due to the Pacifist's ability.</p>`;
+        html += `<p class="center" style="color:var(--neon-safe); margin:0.5rem 0;">🕊️ Voting is cancelled today due to the Pacifist's ability.</p>`;
       }
 
-      // Daytime Actions Container (Marksman, Gunner, Vigilante)
       html += renderDayActionTriggers();
 
       if (currentSecs > 0) {
-        html += `<div class="big center" id="timerDisplay" style="color:var(--solo); margin:1rem 0;">${Math.floor(currentSecs / 60)}:${(currentSecs % 60).toString().padStart(2, '0')}</div>`;
+        html += `<div class="big center" id="timerDisplay" style="color:var(--neon-solo); margin:1.25rem 0; font-size: 2rem; font-weight: 800; text-shadow:0 0 15px var(--neon-solo-glow);">${Math.floor(currentSecs / 60)}:${(currentSecs % 60).toString().padStart(2, '0')}</div>`;
       }
 
       if (state.pacifistRevealTarget) {
@@ -1650,40 +1793,37 @@
       const living = alivePlayers();
       let html = '';
 
-      // Marksman execution trigger
       const marksmen = living.filter(p => p.role === 'marksman' && state.marksmanTargets[p.id]);
       marksmen.forEach(m => {
         const tgt = state.players.find(p => p.id === state.marksmanTargets[m.id] && p.alive);
         if (tgt) {
           html += `
-            <div class="card" style="padding:0.6rem; border-color:var(--solo); margin-bottom:0.5rem;">
+            <div class="card" style="padding:0.75rem; border-color:var(--neon-solo); margin-bottom:0.6rem;">
               <p style="font-size:0.85rem;">🎯 <strong>Marksman Action (${m.name}):</strong> Target locked on <strong>${tgt.name}</strong>.</p>
-              <button class="danger" style="margin-top:0.3rem; padding:0.4rem;" onclick="triggerMarksmanShoot(${m.id}, ${tgt.id})">Execute Marksman Shot</button>
+              <button class="danger" style="margin-top:0.4rem; padding:0.5rem;" onclick="triggerMarksmanShoot(${m.id}, ${tgt.id})">Execute Marksman Shot</button>
             </div>
           `;
         }
       });
 
-      // Gunner shot trigger
       const gunners = living.filter(p => p.role === 'gunner' && p.bullets > 0);
       gunners.forEach(g => {
         html += `
-          <div class="card" style="padding:0.6rem; border-color:var(--village); margin-bottom:0.5rem;">
+          <div class="card" style="padding:0.75rem; border-color:var(--neon-village); margin-bottom:0.6rem;">
             <p style="font-size:0.85rem;">🔫 <strong>Gunner (${g.name})</strong> has ${g.bullets} bullet(s) remaining.</p>
             <select id="gunnerTgt_${g.id}"><option value="">Select player to shoot...</option>${living.filter(p => p.id !== g.id).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>
-            <button class="danger" style="margin-top:0.3rem; padding:0.4rem;" onclick="triggerGunnerShoot(${g.id})">Fire Gunner Shot</button>
+            <button class="danger" style="margin-top:0.4rem; padding:0.5rem;" onclick="triggerGunnerShoot(${g.id})">Fire Gunner Shot</button>
           </div>
         `;
       });
 
-      // Vigilante trigger
       const vigs = living.filter(p => p.role === 'vigilante' && !p.usedOneTime);
       vigs.forEach(v => {
         html += `
-          <div class="card" style="padding:0.6rem; border-color:var(--village); margin-bottom:0.5rem;">
-            <p style="font-size:0.85rem;">🛡️ <strong>Vigilante (${v.name}):</strong> Use 1 bullet to eliminate or inspect.</p>
+          <div class="card" style="padding:0.75rem; border-color:var(--neon-village); margin-bottom:0.6rem;">
+            <p style="font-size:0.85rem;">🛡️ <strong>Vigilante (${v.name}):</strong> Use 1 bullet to eliminate.</p>
             <select id="vigTgt_${v.id}"><option value="">Select target...</option>${living.filter(p => p.id !== v.id).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>
-            <button class="danger" style="margin-top:0.3rem; padding:0.4rem;" onclick="triggerVigilanteAction(${v.id})">Take Vigilante Shot</button>
+            <button class="danger" style="margin-top:0.4rem; padding:0.5rem;" onclick="triggerVigilanteAction(${v.id})">Take Vigilante Shot</button>
           </div>
         `;
       });
@@ -1861,7 +2001,7 @@
         const tg = state.players.find(p => p.id === state.toughGuyAttacked);
         if (tg && tg.alive) {
           processCasualties([{ id: tg.id, reason: "Succumbed to previous night's wounds (Tough Guy)" }]);
-          html += `<p class="center" style="color:var(--wolf);">🩸 Tough Guy (${tg.name}) succumbed to wounds at sunset.</p>`;
+          html += `<p class="center" style="color:var(--neon-wolf);">🩸 Tough Guy (${tg.name}) succumbed to wounds at sunset.</p>`;
         }
         state.toughGuyAttacked = false;
       }
@@ -1902,12 +2042,13 @@
     function endGame(msg) {
       clearInterval(state.timerId);
       clearInterval(state.passiveTimerId);
+      setAmbientTheme('theme-blood');
       switchScreen('end');
       $('winnerText').textContent = msg;
       $('finalRoles').innerHTML = state.players.map(p => `
-        <div style="padding:0.4rem 0; border-bottom:1px solid var(--surface-2); font-size:0.9rem;">
-          <div><strong>${p.name}</strong>: <span class="role-badge badge-${ROLES[p.role].team}">${ROLES[p.role].name}</span> ${p.alive ? '<span style="color:var(--safe);">🟢 Survived</span>' : '<span style="color:var(--wolf);">🔴 Eliminated</span>'}</div>
-          ${!p.alive && p.deathReason ? `<div class="muted" style="font-size:0.75rem; margin-top:0.15rem;">Cause of Death: ${p.deathReason}</div>` : ''}
+        <div style="padding:0.5rem 0; border-bottom:1px solid rgba(255,255,255,0.08); font-size:0.9rem;">
+          <div><strong>${p.name}</strong>: <span class="role-badge badge-${ROLES[p.role].team}">${ROLES[p.role].name}</span> ${p.alive ? '<span style="color:var(--neon-safe); font-weight:700;">🟢 Survived</span>' : '<span style="color:var(--neon-wolf); font-weight:700;">🔴 Eliminated</span>'}</div>
+          ${!p.alive && p.deathReason ? `<div class="muted" style="font-size:0.75rem; margin-top:0.2rem;">Cause of Death: <em>${p.deathReason}</em></div>` : ''}
         </div>
       `).join('');
       return true;
