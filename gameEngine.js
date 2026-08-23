@@ -181,8 +181,37 @@ function freshGameState(settings) {
     juniorTargets: {},
     toughGuyAttacked: false,
     marksmanTargets: {},
-    submitted: {}
+    submitted: {},
+    dayVoteHistory: []
   };
+}
+
+// Builds a plain-language recap of what a player just submitted, from the
+// same field descriptors the client rendered - so the two never drift.
+// Inspect-type fields are skipped since their result was already shown
+// live during the player's own turn.
+function summarizeSubmission(fields, submission) {
+  const lines = [];
+  (fields || []).forEach(f => {
+    if (f.type === 'select') {
+      const val = submission[f.id];
+      if (val) {
+        const o = f.options.find(x => x.value === val);
+        const label = o ? o.label.replace(/\s*\[.*?\]\s*$/, '') : val;
+        lines.push(`${f.label}: ${label}`);
+      }
+    } else if (f.type === 'checkbox') {
+      if (submission[f.id]) lines.push(f.label);
+    } else if (f.type === 'select-pair') {
+      const v1 = submission[f.ids[0]], v2 = submission[f.ids[1]];
+      if (v1 && v2) {
+        const l1 = (f.options.find(x => x.value === v1) || {}).label || v1;
+        const l2 = (f.options.find(x => x.value === v2) || {}).label || v2;
+        lines.push(`${f.label}: ${l1} & ${l2}`);
+      }
+    }
+  });
+  return lines;
 }
 
 function beginNight(game) {
@@ -240,13 +269,16 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
     if (game.round === 1 && game.settings.firstNightImmunity) {
       fields.push({ type: 'info', text: 'First Night Kill Protection is ON. Werewolves cannot eliminate tonight.' });
     } else {
-      if (game.wolfVoteHistory.length > 0) {
-        fields.push({
-          type: 'info',
-          label: '🐺 Earlier Pack Votes Tonight',
-          list: game.wolfVoteHistory.map(v => `${v.voterName} voted for ${v.targetName}`)
-        });
-      }
+      // Always included (not just once someone's voted) - since votes are
+      // simultaneous rather than turn-based, this panel is the live target
+      // the client updates in place as teammates submit their kill vote,
+      // so it needs a stable anchor even while empty.
+      fields.push({
+        type: 'info',
+        id: 'wolfVoteHistoryPanel',
+        label: '🐺 Pack Votes So Far',
+        list: game.wolfVoteHistory.length ? game.wolfVoteHistory.map(v => `${v.voterName} voted for ${v.targetName}`) : ['No votes cast yet.']
+      });
       const voteCounts = {};
       game.wolfVoteHistory.forEach(v => { voteCounts[v.targetId] = (voteCounts[v.targetId] || 0) + 1; });
       fields.push({
@@ -741,11 +773,13 @@ function buildVotePrompt(game, players, player) {
   return { silenced: false, options };
 }
 
-function applyVoteSubmission(game, player, targetId) {
+function applyVoteSubmission(game, players, player, targetId) {
   if (game.silencedId === player.id) return;
   if (!targetId || targetId === 'abstain') return;
   const weight = (player.role === 'mayor' && game.mayorRevealed) ? 2 : 1;
   game.dayVotes[player.id] = { targetId, weight };
+  const tgt = players.find(p => p.id === targetId);
+  game.dayVoteHistory.push({ voterId: player.id, voterName: player.name, targetId, targetName: tgt ? tgt.name : 'Unknown' });
 }
 
 // Does NOT call checkWin() itself (except the two immediate-win special
@@ -826,6 +860,7 @@ module.exports = {
   alivePlayers,
   initPlayerRuntime,
   freshGameState,
+  summarizeSubmission,
   beginNight,
   buildNightPrompt,
   applyInspect,

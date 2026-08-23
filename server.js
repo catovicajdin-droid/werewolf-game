@@ -52,6 +52,16 @@ function getLanAddresses() {
   return addrs;
 }
 
+async function buildJoinOptions(roomCode) {
+  const addrs = getLanAddresses();
+  const candidates = addrs.length ? addrs : ['localhost'];
+  return Promise.all(candidates.map(async (ip) => {
+    const joinUrl = `http://${ip}:${PORT}/player.html?room=${roomCode}`;
+    const qrDataUrl = await QRCode.toDataURL(joinUrl, { margin: 1, width: 280 });
+    return { ip, joinUrl, qrDataUrl };
+  }));
+}
+
 function makeRoomCode() {
   let code;
   do {
@@ -146,7 +156,14 @@ function makeRoom(hostWs) {
     phase: 'lobby',
     config: null,
     headhunterTargets: {},
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    // Cached copies of the last broadcast for each phase, so a host that
+    // reattaches (tab reload, phone lock) can be resynced to exactly what
+    // they were last looking at instead of losing the game's current state.
+    lastMorningReport: null,
+    lastDayBegin: null,
+    lastDayResult: null,
+    lastGameOver: null
   };
   rooms.set(code, room);
   return room;
@@ -192,14 +209,7 @@ async function handleMessage(ws, msg) {
       ws.roomCode = room.code;
       ws.isHost = true;
 
-      const addrs = getLanAddresses();
-      const candidates = addrs.length ? addrs : ['localhost'];
-      const options = await Promise.all(candidates.map(async (ip) => {
-        const joinUrl = `http://${ip}:${PORT}/player.html?room=${room.code}`;
-        const qrDataUrl = await QRCode.toDataURL(joinUrl, { margin: 1, width: 280 });
-        return { ip, joinUrl, qrDataUrl };
-      }));
-
+      const options = await buildJoinOptions(room.code);
       send(ws, { type: 'room:created', code: room.code, options });
       break;
     }
@@ -210,7 +220,9 @@ async function handleMessage(ws, msg) {
       room.hostWs = ws;
       ws.roomCode = room.code;
       ws.isHost = true;
+      send(ws, { type: 'room:created', code: room.code, options: await buildJoinOptions(room.code) });
       broadcastRoster(room);
+      sendHostCurrentState(room);
       break;
     }
 
@@ -226,7 +238,11 @@ async function handleMessage(ws, msg) {
 
       const id = crypto.randomUUID();
       const token = makeToken();
-      room.players.set(id, { id, name, token, ws, role: null, lastExtra: null });
+      room.players.set(id, {
+        id, name, token, ws, role: null, lastExtra: null,
+        pendingNightFields: null, pendingVoteOptions: null,
+        lastNightRecap: null, lastVoteRecap: null
+      });
       ws.roomCode = room.code;
       ws.playerId = id;
 
@@ -257,17 +273,7 @@ async function handleMessage(ws, msg) {
       ws.playerId = player.id;
 
       send(ws, { type: 'player:joined', playerId: player.id, token: player.token, roomCode: room.code, name: player.name });
-      if (player.role) {
-        const r = ROLES[player.role];
-        send(ws, {
-          type: 'role:assign',
-          role: player.role,
-          name: r.name,
-          team: r.team,
-          desc: r.desc,
-          extra: player.lastExtra || null
-        });
-      }
+      sendPlayerCurrentState(room, player);
       broadcastRoster(room);
       break;
     }
@@ -281,6 +287,15 @@ async function handleMessage(ws, msg) {
         room.players.delete(msg.playerId);
         broadcastRoster(room);
       }
+      break;
+    }
+
+    case 'host:end-session': {
+      const room = rooms.get(ws.roomCode);
+      if (!room || !ws.isHost) return;
+      const payload = { type: 'room:kicked', reason: 'host-ended-session' };
+      room.players.forEach(p => send(p.ws, payload));
+      rooms.delete(room.code);
       break;
     }
 
@@ -339,8 +354,16 @@ async function handleMessage(ws, msg) {
       if (room.game.submitted[player.id]) return; // already submitted this night
 
       const players = Array.from(room.players.values());
-      engine.applyNightSubmission(room.game, players, player, msg.submission || {});
+      const submission = msg.submission || {};
+      engine.applyNightSubmission(room.game, players, player, submission);
       room.game.submitted[player.id] = true;
+
+      player.lastNightRecap = engine.summarizeSubmission(player.pendingNightFields, submission);
+      send(ws, { type: 'night:ack', recapLines: player.lastNightRecap });
+
+      if (engine.isWolf(player.role) && submission.wolfIndividualVote) {
+        broadcastWolfVoteUpdate(room);
+      }
 
       broadcastNightProgress(room);
       maybeResolveNight(room);
@@ -360,6 +383,7 @@ async function handleMessage(ws, msg) {
         cancelReason: room.game.pacifistRevealTarget ? 'pacifist' : (room.game.votingDisabledThisRound ? 'vigilante' : null),
         dayTimerSeconds: room.game.settings.dayTimer
       };
+      room.lastDayBegin = payload;
       send(room.hostWs, payload);
       room.players.forEach(p => send(p.ws, payload));
       break;
@@ -386,8 +410,27 @@ async function handleMessage(ws, msg) {
       if (!player || !player.alive) return;
       if (room.game.submitted[player.id]) return;
 
-      engine.applyVoteSubmission(room.game, player, msg.targetId || null);
+      const players = Array.from(room.players.values());
+      const targetId = msg.targetId || null;
+      const wasSilenced = room.game.silencedId === player.id;
+      engine.applyVoteSubmission(room.game, players, player, targetId);
       room.game.submitted[player.id] = true;
+
+      let recapLine;
+      if (wasSilenced) {
+        recapLine = 'You were silenced and could not vote.';
+      } else if (!targetId || targetId === 'abstain') {
+        recapLine = 'You chose to abstain.';
+      } else {
+        const opt = (player.pendingVoteOptions || []).find(o => o.value === targetId);
+        recapLine = `You voted for: ${opt ? opt.label : 'Unknown'}`;
+      }
+      player.lastVoteRecap = recapLine;
+      send(ws, { type: 'vote:ack', recapLine });
+
+      if (!wasSilenced && targetId && targetId !== 'abstain') {
+        broadcastDayVoteUpdate(room);
+      }
 
       broadcastNightProgress(room);
       maybeResolveVotes(room);
@@ -415,6 +458,8 @@ function startNight(room) {
 
   living.forEach(player => {
     const prompt = engine.buildNightPrompt(room.game, players, room.headhunterTargets, player);
+    player.pendingNightFields = prompt.fields;
+    player.lastNightRecap = null;
     send(player.ws, {
       type: 'night:prompt',
       round: room.game.round,
@@ -430,11 +475,10 @@ function startNight(room) {
   maybeResolveNight(room);
 }
 
-function broadcastNightProgress(room) {
-  if (!room.game) return;
+function buildProgressPayload(room) {
   const pending = room.phase === 'day-vote' ? room.game.pendingVoters : room.game.pendingSubmitters;
   const players = Array.from(room.players.values());
-  const payload = {
+  return {
     type: room.phase === 'day-vote' ? 'vote:progress' : 'night:progress',
     round: room.game.round,
     players: (pending || []).map(id => {
@@ -442,8 +486,35 @@ function broadcastNightProgress(room) {
       return { name: p ? p.name : 'Unknown', submitted: !!room.game.submitted[id] };
     })
   };
+}
+
+function broadcastNightProgress(room) {
+  if (!room.game) return;
+  const payload = buildProgressPayload(room);
   send(room.hostWs, payload);
   room.players.forEach(p => send(p.ws, payload));
+}
+
+// Sends the live "who's voting for whom" panel to wolves who haven't
+// submitted their kill vote yet, so the pack can coordinate in real time -
+// mirrors the single-device app's wolfVoteHistory panel, made live since
+// prompts now all go out simultaneously instead of turn by turn.
+function broadcastWolfVoteUpdate(room) {
+  const players = Array.from(room.players.values());
+  const pendingWolves = players.filter(p => p.alive && engine.isWolf(p.role) && !room.game.submitted[p.id]);
+  pendingWolves.forEach(w => {
+    send(w.ws, { type: 'night:wolf-vote-update', wolfVoteHistory: room.game.wolfVoteHistory });
+  });
+}
+
+// Same idea for the day vote - villagers should see who's voting for whom
+// as it happens, not just after everyone's locked in.
+function broadcastDayVoteUpdate(room) {
+  const players = Array.from(room.players.values());
+  const pending = players.filter(p => p.alive && !room.game.submitted[p.id]);
+  pending.forEach(p => {
+    send(p.ws, { type: 'vote:tally-update', dayVoteHistory: room.game.dayVoteHistory });
+  });
 }
 
 function maybeResolveNight(room) {
@@ -486,13 +557,16 @@ function maybeResolveNight(room) {
     killedNames: killed.map(p => p.name),
     notes
   };
+  // Host-only: results are narrated by the game master, not broadcast to
+  // every phone. Players stay on their own recap/waiting screen.
+  room.lastMorningReport = payload;
   send(room.hostWs, payload);
-  room.players.forEach(p => send(p.ws, payload));
 }
 
 function startVote(room) {
   room.phase = 'day-vote';
   room.game.dayVotes = {};
+  room.game.dayVoteHistory = [];
   room.game.submitted = {};
   const players = Array.from(room.players.values());
   const living = players.filter(p => p.alive);
@@ -500,8 +574,9 @@ function startVote(room) {
 
   living.forEach(player => {
     const prompt = engine.buildVotePrompt(room.game, players, player);
+    player.pendingVoteOptions = prompt.options;
+    player.lastVoteRecap = null;
     send(player.ws, { type: 'vote:prompt', round: room.game.round, ...prompt });
-    if (prompt.silenced) room.game.submitted[player.id] = true;
   });
 
   broadcastNightProgress(room);
@@ -522,8 +597,9 @@ function maybeResolveVotes(room) {
 
   room.phase = 'day-results';
   const payload = { type: 'day:result', round: room.game.round, ...result };
+  // Host-only, same reasoning as the morning report.
+  room.lastDayResult = payload;
   send(room.hostWs, payload);
-  room.players.forEach(p => send(p.ws, payload));
 }
 
 function advanceRoundOrEnd(room) {
@@ -541,8 +617,79 @@ function endGame(room, message) {
   room.phase = 'game-over';
   const players = Array.from(room.players.values());
   const payload = { type: 'game:over', message, finalRoles: engine.buildFinalRoles(players) };
+  room.lastGameOver = payload;
   send(room.hostWs, payload);
   room.players.forEach(p => send(p.ws, payload));
+}
+
+// Resyncs a reconnecting player to wherever the game currently is, instead
+// of leaving their client stuck on whatever screen it last rendered.
+function sendPlayerCurrentState(room, player) {
+  if (!player.role) return; // game hasn't started yet - the lobby screen is already correct
+
+  const r = ROLES[player.role];
+  send(player.ws, {
+    type: 'role:assign',
+    role: player.role, name: r.name, team: r.team, desc: r.desc,
+    extra: player.lastExtra || null
+  });
+
+  if (!room.game || !player.alive) return;
+
+  if (room.phase === 'night') {
+    if (room.game.submitted[player.id]) {
+      send(player.ws, { type: 'night:ack', recapLines: player.lastNightRecap || [], resync: true });
+    } else {
+      const players = Array.from(room.players.values());
+      const prompt = engine.buildNightPrompt(room.game, players, room.headhunterTargets, player);
+      player.pendingNightFields = prompt.fields;
+      send(player.ws, {
+        type: 'night:prompt', round: room.game.round,
+        role: player.role, roleName: r.name, team: r.team, roleDesc: r.desc,
+        ...prompt
+      });
+    }
+  } else if (room.phase === 'morning') {
+    send(player.ws, { type: 'night:ack', recapLines: player.lastNightRecap || [], resync: true });
+  } else if (room.phase === 'day-discussion') {
+    if (room.lastDayBegin) send(player.ws, room.lastDayBegin);
+  } else if (room.phase === 'day-vote') {
+    if (room.game.submitted[player.id]) {
+      send(player.ws, { type: 'vote:ack', recapLine: player.lastVoteRecap || '', resync: true });
+    } else {
+      const players = Array.from(room.players.values());
+      const prompt = engine.buildVotePrompt(room.game, players, player);
+      player.pendingVoteOptions = prompt.options;
+      send(player.ws, { type: 'vote:prompt', round: room.game.round, ...prompt });
+    }
+  } else if (room.phase === 'day-results') {
+    send(player.ws, { type: 'vote:ack', recapLine: player.lastVoteRecap || '', resync: true });
+  } else if (room.phase === 'game-over') {
+    if (room.lastGameOver) send(player.ws, room.lastGameOver);
+  }
+}
+
+// Same idea for a reattaching host - restores whichever screen matches the
+// room's current phase instead of dumping them back to a blank lobby.
+function sendHostCurrentState(room) {
+  if (!room.game) {
+    if (room.phase === 'roles-assigned') send(room.hostWs, { type: 'host:started' });
+    return;
+  }
+
+  if (room.phase === 'roles-assigned') {
+    send(room.hostWs, { type: 'host:started' });
+  } else if (room.phase === 'night' || room.phase === 'day-vote') {
+    send(room.hostWs, buildProgressPayload(room));
+  } else if (room.phase === 'morning') {
+    if (room.lastMorningReport) send(room.hostWs, room.lastMorningReport);
+  } else if (room.phase === 'day-discussion') {
+    if (room.lastDayBegin) send(room.hostWs, room.lastDayBegin);
+  } else if (room.phase === 'day-results') {
+    if (room.lastDayResult) send(room.hostWs, room.lastDayResult);
+  } else if (room.phase === 'game-over') {
+    if (room.lastGameOver) send(room.hostWs, room.lastGameOver);
+  }
 }
 
 // Periodically reap abandoned rooms (no host, no connected players, old).

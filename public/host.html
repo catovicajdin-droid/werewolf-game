@@ -10,6 +10,10 @@
   <div class="container">
     <h1>Werewolf: Host</h1>
 
+    <div class="center" style="margin:-0.75rem 0 1rem;">
+      <button id="exitSessionBtn" class="secondary" style="width:auto; padding:0.3rem 0.8rem; font-size:0.75rem; margin:0;">Exit Session</button>
+    </div>
+
     <div id="screen-connecting" class="screen active">
       <div class="card center">
         <p class="muted">Starting a room...</p>
@@ -22,6 +26,7 @@
         <div class="room-code" id="roomCode">-----</div>
         <div class="qr-wrap"><img id="qrImg" alt="Join QR code"></div>
         <p class="muted" id="joinUrlText" style="word-break:break-all;"></p>
+        <button id="copyLinkBtn" class="secondary" style="width:auto; padding:0.4rem 0.9rem; font-size:0.8rem; margin-top:0.6rem;">Copy Link</button>
         <div id="altAddresses" style="display:none; margin-top:1rem; text-align:left;">
           <p class="muted center" style="margin-bottom:0.5rem;">Scan not working? Your device has more than one network address (common when hosting from a phone with Wi-Fi + hotspot both active) - try one of these instead:</p>
           <div id="altAddressList"></div>
@@ -144,6 +149,17 @@
         <div id="hostFinalRolesList" style="text-align:left; margin:1rem 0;"></div>
       </div>
     </div>
+
+    <div id="exitSessionModal" class="modal">
+      <div class="modal-content">
+        <h3>Exit Session?</h3>
+        <p style="margin:0.75rem 0; line-height:1.5;">This ends the game for everyone connected right now - all players will be disconnected and the room closed. This can't be undone.</p>
+        <div class="grid-2">
+          <button id="exitSessionCancelBtn" class="secondary">Cancel</button>
+          <button id="exitSessionConfirmBtn" class="danger">Exit &amp; End Session</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="shared/roles.js"></script>
@@ -163,20 +179,38 @@
     });
 
     let players = [];
+    let currentJoinUrl = '';
+
+    // A reload/reattach should resume the SAME room, not silently create a
+    // new one and orphan the old code everyone's already looking at. Only
+    // the explicit Exit Session button (below) actually ends a room.
+    const HOST_SESSION_KEY = 'werewolf_host_room';
+    function loadHostRoom() { try { return sessionStorage.getItem(HOST_SESSION_KEY); } catch { return null; } }
+    function saveHostRoom(code) { try { sessionStorage.setItem(HOST_SESSION_KEY, code); } catch { /* ignore */ } }
+    function clearHostRoom() { try { sessionStorage.removeItem(HOST_SESSION_KEY); } catch { /* ignore */ } }
+
+    let isReattach = false;
 
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}/ws`);
 
     ws.addEventListener('open', () => {
-      ws.send(JSON.stringify({ type: 'host:create' }));
+      const existing = loadHostRoom();
+      if (existing) {
+        isReattach = true;
+        ws.send(JSON.stringify({ type: 'host:reattach', code: existing }));
+      } else {
+        ws.send(JSON.stringify({ type: 'host:create' }));
+      }
     });
 
     ws.addEventListener('message', (ev) => {
       const msg = JSON.parse(ev.data);
 
       if (msg.type === 'room:created') {
+        saveHostRoom(msg.code);
         $('roomCode').textContent = msg.code;
-        showAddressOption(msg.options[0]);
+        if (msg.options.length) showAddressOption(msg.options[0]);
 
         if (msg.options.length > 1) {
           $('altAddresses').style.display = '';
@@ -187,10 +221,17 @@
           `).join('');
         }
 
-        switchScreen('screen-lobby');
+        // On a fresh room, go straight to the lobby. On a reattach, wait
+        // for the roster (below) to tell us the room's actual current
+        // phase instead of flashing the lobby before jumping elsewhere.
+        if (!isReattach) switchScreen('screen-lobby');
       } else if (msg.type === 'room:roster') {
         players = msg.players;
         renderRoster();
+        if (isReattach && msg.phase === 'lobby') {
+          switchScreen('screen-lobby');
+        }
+        isReattach = false;
       } else if (msg.type === 'room:error') {
         alert(msg.message);
       } else if (msg.type === 'host:started') {
@@ -219,9 +260,35 @@
     });
 
     window.showAddressOption = function (opt) {
+      currentJoinUrl = opt.joinUrl;
       $('qrImg').src = opt.qrDataUrl;
       $('joinUrlText').textContent = opt.joinUrl;
     };
+
+    $('copyLinkBtn').addEventListener('click', async () => {
+      if (!currentJoinUrl) return;
+      try {
+        await navigator.clipboard.writeText(currentJoinUrl);
+        const original = $('copyLinkBtn').textContent;
+        $('copyLinkBtn').textContent = 'Copied!';
+        setTimeout(() => { $('copyLinkBtn').textContent = original; }, 1500);
+      } catch {
+        alert('Could not copy automatically - long-press or select the link text above to copy it manually.');
+      }
+    });
+
+    $('exitSessionBtn').addEventListener('click', () => {
+      $('exitSessionModal').classList.add('active');
+    });
+    $('exitSessionCancelBtn').addEventListener('click', () => {
+      $('exitSessionModal').classList.remove('active');
+    });
+    $('exitSessionConfirmBtn').addEventListener('click', () => {
+      ws.send(JSON.stringify({ type: 'host:end-session' }));
+      clearHostRoom();
+      $('exitSessionModal').classList.remove('active');
+      location.reload();
+    });
 
     function renderRoster() {
       $('playerCount').textContent = players.length;

@@ -24,7 +24,7 @@
 
     <div id="screen-waiting" class="screen">
       <div class="card center">
-        <p class="muted">You're in! Waiting for the host to start the game.</p>
+        <p class="muted" id="waitingStatusText">You're in! Waiting for the host to start the game.</p>
         <div class="giant" id="waitingName" style="color:var(--neon-safe); text-shadow:0 0 20px var(--neon-safe-glow); margin:0.75rem 0;"></div>
       </div>
       <div class="card">
@@ -33,52 +33,34 @@
       </div>
     </div>
 
-    <div id="screen-reveal" class="screen">
-      <div class="card center privacy-box">
+    <div id="screen-night" class="screen">
+      <div class="card center privacy-box" id="nightGate">
         <p class="muted" style="margin-bottom:1rem;">Make sure no one else can see your screen.</p>
-        <button id="revealBtn" class="purple big" style="padding:1rem;">Tap to Reveal Your Role</button>
+        <button id="nightRevealBtn" class="purple big" style="padding:1rem;">Tap to View Your Role &amp; Action</button>
       </div>
-      <div id="roleCardWrap" style="display:none;">
+      <div id="nightContent" style="display:none;">
         <div class="card">
           <div class="role-banner">
-            <span id="roleBadge" class="role-badge"></span>
-            <h2 id="roleName" style="margin-top:0.5rem;"></h2>
-            <p id="roleDesc" class="muted" style="margin-top:0.5rem; line-height:1.4;"></p>
-            <div id="roleExtra" style="margin-top:0.75rem; font-size:0.9rem; color:var(--neon-solo);"></div>
+            <p class="muted" id="nightRoundHeading" style="font-size:0.8rem; margin-bottom:0.2rem;"></p>
+            <span id="nightRoleBadge" class="role-badge"></span>
+            <h2 id="nightRoleTitle" style="margin-top:0.4rem;"></h2>
+            <p id="nightRoleDesc" class="muted" style="font-size:0.85rem; margin-top:0.25rem; line-height:1.4;"></p>
+            <div id="nightExtra" style="margin-top:0.5rem; font-size:0.85rem; color:var(--neon-solo);"></div>
           </div>
-          <p class="muted center" style="font-size:0.8rem;">Keep this tab open — the game continues here automatically once the host begins the night.</p>
+          <div id="nightMessage" class="center" style="margin: 0.5rem 0;"></div>
+          <div id="nightFields" class="action-box"></div>
+          <button id="nightSubmitBtn" class="purple big" style="margin-top:1rem; padding:0.9rem;">Confirm Action</button>
         </div>
-      </div>
-    </div>
-
-    <div id="screen-night" class="screen">
-      <div class="card">
-        <div class="role-banner">
-          <p class="muted" id="nightRoundHeading" style="font-size:0.8rem; margin-bottom:0.2rem;"></p>
-          <span id="nightRoleBadge" class="role-badge"></span>
-          <h2 id="nightRoleTitle" style="margin-top:0.4rem;"></h2>
-          <p id="nightRoleDesc" class="muted" style="font-size:0.85rem; margin-top:0.25rem; line-height:1.4;"></p>
-          <div id="nightExtra" style="margin-top:0.5rem; font-size:0.85rem; color:var(--neon-solo);"></div>
-        </div>
-        <div id="nightMessage" class="center" style="margin: 0.5rem 0;"></div>
-        <div id="nightFields" class="action-box"></div>
-        <button id="nightSubmitBtn" class="purple big" style="margin-top:1rem; padding:0.9rem;">Confirm Action</button>
       </div>
     </div>
 
     <div id="screen-night-waiting" class="screen">
       <div class="card center">
-        <p class="muted">Waiting for other players to finish their night actions...</p>
+        <span id="waitRoleBadge" class="role-badge"></span>
+        <h3 id="waitRoleName" style="margin:0.5rem 0;"></h3>
+        <div id="nightRecapContent" class="muted" style="text-align:left; margin:0.75rem 0; font-size:0.9rem;"></div>
+        <p class="muted" style="margin-top:0.5rem;">Waiting for other players, then the Game Master will share what happened...</p>
         <ul id="nightProgressList" class="player-list" style="text-align:left; margin-top:0.75rem;"></ul>
-      </div>
-    </div>
-
-    <div id="screen-morning" class="screen">
-      <div class="card">
-        <h3 id="morningHeading"></h3>
-        <div id="morningNotes"></div>
-        <div id="morningKilled"></div>
-        <p class="muted center" style="margin-top:1rem;">Waiting for the host to start day discussion...</p>
       </div>
     </div>
 
@@ -88,13 +70,14 @@
         <div id="daySilenceNote"></div>
         <div id="dayCancelNote"></div>
         <div class="big center" id="dayTimerDisplay" style="color:var(--neon-solo); margin:1.25rem 0; font-size:2rem; font-weight:800; text-shadow:0 0 15px var(--neon-solo-glow);"></div>
-        <p class="muted">Waiting for the host to open voting...</p>
+        <p class="muted">Waiting for the Game Master to open voting...</p>
       </div>
     </div>
 
     <div id="screen-vote" class="screen">
       <div class="card">
         <div class="center" style="margin-bottom:0.5rem;"><span class="muted">Day Vote</span></div>
+        <div id="voteTallyPanel" class="muted" style="margin-bottom:0.75rem; font-size:0.85rem;"></div>
         <div id="voteContent"></div>
         <button id="voteSubmitBtn" class="danger big" style="margin-top:0.5rem; padding:0.9rem;">Submit Vote</button>
       </div>
@@ -102,16 +85,9 @@
 
     <div id="screen-vote-waiting" class="screen">
       <div class="card center">
-        <p class="muted">Waiting for other players to vote...</p>
+        <p id="voteRecapContent" class="big" style="margin:0.5rem 0;"></p>
+        <p class="muted" style="margin-top:0.5rem;">Waiting for other players, then the Game Master will share the results...</p>
         <ul id="voteProgressList" class="player-list" style="text-align:left; margin-top:0.75rem;"></ul>
-      </div>
-    </div>
-
-    <div id="screen-day-result" class="screen">
-      <div class="card">
-        <h3>Vote Results</h3>
-        <div id="dayResultContent"></div>
-        <p class="muted center" style="margin-top:1rem;">Waiting for the host to continue...</p>
       </div>
     </div>
 
@@ -128,6 +104,17 @@
         <h3>Disconnected</h3>
         <p class="muted" id="errorText">Something went wrong.</p>
         <button id="backToJoinBtn" class="secondary">Back to Join Screen</button>
+      </div>
+    </div>
+
+    <div id="confirmSkipModal" class="modal">
+      <div class="modal-content">
+        <h3>Unused Action</h3>
+        <p style="margin:0.75rem 0; line-height:1.5;">You haven't used your action tonight. Are you sure you want to skip it?</p>
+        <div class="grid-2">
+          <button id="confirmSkipCancelBtn" class="secondary">Cancel</button>
+          <button id="confirmSkipConfirmBtn" class="danger">Confirm (Skip)</button>
+        </div>
       </div>
     </div>
   </div>
@@ -168,6 +155,8 @@
     let myRoomCode = '';
     let pendingRejoinSeat = null;
     let haveRole = false;
+    let currentRoleInfo = null; // { name, team, desc } for the waiting/recap screens
+    let currentNightPassive = false;
 
     function connect() {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -198,9 +187,9 @@
           history.replaceState(null, '', `${location.pathname}?room=${myRoomCode}`);
           $('waitingName').textContent = myName;
           // Only force the lobby screen on a fresh join. On a reconnect
-          // that already had a role, a role:assign is on its way right
-          // behind this message - jumping to "waiting" first just flashes
-          // the wrong screen before flipping back to the role.
+          // mid-game, the messages that follow (role:assign, then whatever
+          // the current phase needs) decide the real screen - jumping to
+          // "waiting" first would just flash the wrong screen.
           if (!haveRole) switchScreen('screen-waiting');
         } else if (msg.type === 'room:roster') {
           $('playerCount').textContent = msg.players.length;
@@ -209,30 +198,36 @@
           `).join('');
         } else if (msg.type === 'role:assign') {
           haveRole = true;
-          renderRole(msg);
-          switchScreen('screen-reveal');
+          currentRoleInfo = { name: msg.name, team: msg.team, desc: msg.desc };
+          $('waitingStatusText').textContent = 'Your role has been set - waiting for the Game Master to begin the night...';
         } else if (msg.type === 'night:prompt') {
           renderNightPrompt(msg);
         } else if (msg.type === 'night:inspect-result') {
           renderInspectResult(msg.fieldId, msg.result);
+        } else if (msg.type === 'night:wolf-vote-update') {
+          renderWolfVoteUpdate(msg.wolfVoteHistory);
+        } else if (msg.type === 'night:ack') {
+          renderNightRecap(msg.recapLines);
         } else if (msg.type === 'night:progress') {
           renderProgressList('nightProgressList', msg.players);
-        } else if (msg.type === 'morning:report') {
-          renderMorning(msg);
         } else if (msg.type === 'day:begin') {
           renderDayBegin(msg);
         } else if (msg.type === 'vote:prompt') {
           renderVotePrompt(msg);
+        } else if (msg.type === 'vote:tally-update') {
+          renderVoteTally(msg.dayVoteHistory);
+        } else if (msg.type === 'vote:ack') {
+          renderVoteRecap(msg.recapLine);
         } else if (msg.type === 'vote:progress') {
           renderProgressList('voteProgressList', msg.players);
-        } else if (msg.type === 'day:result') {
-          renderDayResult(msg);
         } else if (msg.type === 'game:over') {
           renderGameOver(msg);
         } else if (msg.type === 'room:kicked') {
           clearSeat(myRoomCode);
           if (msg.reason === 'seat-reclaimed') {
             showError('Your seat was just opened in another tab or device, so this one has been disconnected. If that was you, use the other tab. If not, something joined using your seat\'s link - rejoin with a fresh link.');
+          } else if (msg.reason === 'host-ended-session') {
+            showError('The Game Master has ended this session.');
           } else {
             showError('You were removed from the room by the host.');
           }
@@ -262,34 +257,6 @@
       switchScreen('screen-error');
     }
 
-    function renderRole(msg) {
-      $('revealBtn').style.display = '';
-      $('roleCardWrap').style.display = 'none';
-      $('roleBadge').className = `role-badge badge-${msg.team}`;
-      $('roleBadge').textContent = `${msg.team.toUpperCase()} TEAM`;
-      $('roleName').textContent = msg.name;
-      $('roleDesc').textContent = msg.desc;
-
-      let extraHtml = '';
-      if (msg.extra) {
-        if (msg.extra.kind === 'wolfpack') {
-          extraHtml = msg.extra.names.length
-            ? `🐺 Fellow Werewolves: <strong>${msg.extra.names.join(', ')}</strong>`
-            : `🐺 You are the only Werewolf.`;
-        } else if (msg.extra.kind === 'siblings') {
-          extraHtml = `👥 Siblings: <strong>${msg.extra.names.length ? msg.extra.names.join(', ') : 'None'}</strong>`;
-        } else if (msg.extra.kind === 'headhunter_target') {
-          extraHtml = `🎯 Your secret bounty target: <strong>${msg.extra.name || 'Unknown'}</strong>`;
-        }
-      }
-      $('roleExtra').innerHTML = extraHtml;
-
-      $('revealBtn').onclick = () => {
-        $('revealBtn').parentElement.style.display = 'none';
-        $('roleCardWrap').style.display = '';
-      };
-    }
-
     // ---- Night action: a generic renderer for the field descriptors the
     // server sends (select / checkbox / info / inspect / inspect-pair /
     // select-pair) - one renderer handles all 46 roles instead of a
@@ -298,6 +265,11 @@
     let inspectResultEls = {};
     let inspectKindByField = {};
     let nightGetters = {};
+    // Inspect actions resolve over a separate night:inspect round-trip, so
+    // their getters always return null - track separately whether one fired
+    // this prompt, or a Seer/Detective who already inspected someone would
+    // still get wrongly asked "are you sure you want to skip your action?".
+    let anyInspectUsedThisPrompt = false;
 
     function renderFields(fields) {
       const container = $('nightFields');
@@ -326,9 +298,11 @@
       fields.forEach(f => {
         const wrap = document.createElement('div');
         wrap.style.marginBottom = '0.6rem';
+        if (f.id) wrap.id = `field_${f.id}`;
 
         if (f.type === 'info') {
           wrap.className = 'muted';
+          if (f.id) wrap.id = f.id; // stable anchor for live-update panels (e.g. wolfVoteHistoryPanel)
           if (f.label) {
             wrap.innerHTML = `<strong>${f.label}</strong>` + (f.list ? `<div style="font-size:0.85rem; margin-top:0.3rem;">${f.list.map(x => `• ${x}`).join('<br>')}</div>` : '');
           } else {
@@ -391,6 +365,7 @@
           btn.onclick = () => {
             if (!sel.value) return;
             ws.send(JSON.stringify({ type: 'night:inspect', fieldId: f.id, inspectKind: f.inspectKind, targetId: sel.value }));
+            anyInspectUsedThisPrompt = true;
             btn.disabled = true;
             sel.disabled = true;
           };
@@ -420,6 +395,7 @@
             if (!sel1.value || !sel2.value) return;
             if (sel1.value === sel2.value) return alert('Please select two different players.');
             ws.send(JSON.stringify({ type: 'night:inspect', fieldId: f.ids[0], inspectKind: f.inspectKind, targetId: sel1.value, targetId2: sel2.value }));
+            anyInspectUsedThisPrompt = true;
             btn.disabled = true;
             sel1.disabled = true;
             sel2.disabled = true;
@@ -470,9 +446,44 @@
       }
     }
 
+    // Live-updates the wolf pack's "votes so far" panel and the vote-count
+    // suffixes on the kill-vote dropdown, without resetting the form -
+    // fires whenever ANY wolf (including this one) submits their vote.
+    function renderWolfVoteUpdate(history) {
+      const panel = $('wolfVoteHistoryPanel');
+      if (panel) {
+        panel.innerHTML = `<strong>🐺 Pack Votes So Far</strong><div style="font-size:0.85rem; margin-top:0.3rem;">${
+          history.length ? history.map(v => `• ${v.voterName} voted for ${v.targetName}`).join('<br>') : 'No votes cast yet.'
+        }</div>`;
+      }
+      const sel = $('wolfIndividualVote');
+      if (sel) {
+        const counts = {};
+        history.forEach(v => { counts[v.targetId] = (counts[v.targetId] || 0) + 1; });
+        const current = sel.value;
+        Array.from(sel.options).forEach(o => {
+          if (!o.value) return;
+          const base = o.textContent.replace(/\s*\[.*?\]\s*$/, '');
+          const c = counts[o.value] || 0;
+          o.textContent = base + (c ? ` [🐺 ${c} vote${c > 1 ? 's' : ''}]` : '');
+        });
+        sel.value = current;
+      }
+    }
+
+    function renderVoteTally(history) {
+      const panel = $('voteTallyPanel');
+      if (!panel) return;
+      panel.innerHTML = history.length
+        ? `<strong>Votes so far:</strong><div style="margin-top:0.3rem;">${history.map(v => `• ${v.voterName} voted for ${v.targetName}`).join('<br>')}</div>`
+        : '';
+    }
+
     function renderNightPrompt(msg) {
       inspectResultEls = {};
       inspectKindByField = {};
+      currentNightPassive = !!msg.passive;
+      anyInspectUsedThisPrompt = false;
 
       $('nightRoundHeading').textContent = `Night ${msg.round}`;
       $('nightRoleBadge').className = `role-badge badge-${msg.team}`;
@@ -501,41 +512,52 @@
       $('nightMessage').textContent = msg.message || '';
       nightGetters = renderFields(msg.fields || []);
 
+      const doSubmit = (submission) => {
+        ws.send(JSON.stringify({ type: 'night:submit', submission }));
+      };
+
       $('nightSubmitBtn').onclick = () => {
         const submission = {};
         Object.keys(nightGetters).forEach(k => { submission[k] = nightGetters[k](); });
-        ws.send(JSON.stringify({ type: 'night:submit', submission }));
-        switchScreen('screen-night-waiting');
+        const usedSomething = anyInspectUsedThisPrompt || Object.values(submission).some(v => v !== null && v !== false && v !== '');
+        if (!currentNightPassive && !usedSomething) {
+          $('confirmSkipModal').classList.add('active');
+          $('confirmSkipCancelBtn').onclick = () => $('confirmSkipModal').classList.remove('active');
+          $('confirmSkipConfirmBtn').onclick = () => {
+            $('confirmSkipModal').classList.remove('active');
+            doSubmit(submission);
+          };
+        } else {
+          doSubmit(submission);
+        }
+      };
+
+      // Fresh privacy gate every night - the prompt could have landed while
+      // the phone was face-up on a table.
+      $('nightGate').style.display = '';
+      $('nightContent').style.display = 'none';
+      $('nightRevealBtn').onclick = () => {
+        $('nightGate').style.display = 'none';
+        $('nightContent').style.display = '';
       };
 
       switchScreen('screen-night');
     }
 
-    function renderProgressList(listId, players) {
-      $(listId).innerHTML = players.map(p => `<li><span>${p.submitted ? '✅' : '⏳'} ${p.name}</span></li>`).join('');
+    function renderNightRecap(recapLines) {
+      if (currentRoleInfo) {
+        $('waitRoleBadge').className = `role-badge badge-${currentRoleInfo.team}`;
+        $('waitRoleBadge').textContent = `${currentRoleInfo.team.toUpperCase()} TEAM`;
+        $('waitRoleName').textContent = currentRoleInfo.name;
+      }
+      $('nightRecapContent').innerHTML = recapLines && recapLines.length
+        ? `<strong>What you did tonight:</strong><div style="margin-top:0.3rem;">${recapLines.map(l => `• ${l}`).join('<br>')}</div>`
+        : `<div class="center">You didn't use an action tonight.</div>`;
+      switchScreen('screen-night-waiting');
     }
 
-    function renderMorning(msg) {
-      $('morningHeading').textContent = `Morning ${msg.round} Report`;
-      let notesHtml = '';
-      (msg.notes || []).forEach(n => {
-        if (n.kind === 'pacifist') {
-          notesHtml += `<div class="card" style="padding:0.85rem; border-color:var(--neon-safe); background:rgba(52,211,153,0.1); margin-bottom:0.75rem;"><strong style="color:var(--neon-safe);">🕊️ The Pacifist has pacified the village!</strong><div style="margin-top:0.3rem;"><strong>${n.name}</strong> was revealed to be <span class="role-badge badge-${n.team}">${n.roleName}</span>!</div><div class="muted" style="font-size:0.8rem; margin-top:0.2rem;">Daytime voting is cancelled for today.</div></div>`;
-        } else if (n.kind === 'mayor-revealed') {
-          notesHtml += `<div class="card" style="padding:0.85rem; border-color:var(--neon-solo); background:rgba(251,191,36,0.1); margin-bottom:0.75rem;"><strong style="color:var(--neon-solo);">🎖️ ${n.name} has revealed themselves as the Mayor!</strong><div class="muted" style="font-size:0.8rem; margin-top:0.2rem;">Their vote now counts as 2 for the rest of the game.</div></div>`;
-        } else if (n.kind === 'gunner-shot') {
-          notesHtml += `<div class="card" style="padding:0.85rem; border-color:var(--neon-village); background:rgba(56,189,248,0.1); margin-bottom:0.75rem;"><strong style="color:var(--neon-village);">🔫 ${n.name} revealed themselves as the Gunner and fired a shot!</strong></div>`;
-        } else if (n.kind === 'marksman-executed') {
-          notesHtml += `<div class="card" style="padding:0.85rem; border-color:var(--neon-solo); background:rgba(251,191,36,0.1); margin-bottom:0.75rem;"><strong style="color:var(--neon-solo);">🎯 ${n.name} the Marksman executed their marked target!</strong></div>`;
-        } else if (n.kind === 'vigilante-inspect') {
-          notesHtml += `<div class="card" style="padding:0.85rem; border-color:var(--neon-village); background:rgba(56,189,248,0.1); margin-bottom:0.75rem;"><strong style="color:var(--neon-village);">🔍 The Vigilante inspected a role last night.</strong><div class="muted" style="font-size:0.8rem; margin-top:0.2rem;">Voting is cancelled today.</div></div>`;
-        }
-      });
-      $('morningNotes').innerHTML = notesHtml;
-      $('morningKilled').innerHTML = msg.killedNames.length
-        ? msg.killedNames.map(n => `<p class="center" style="margin:0.5rem 0;">☠️ <strong>${n}</strong> died during the night.</p>`).join('')
-        : `<p class="center" style="margin:0.75rem 0;">🌅 A peaceful night. No one died.</p>`;
-      switchScreen('screen-morning');
+    function renderProgressList(listId, players) {
+      $(listId).innerHTML = players.map(p => `<li><span>${p.submitted ? '✅' : '⏳'} ${p.name}</span></li>`).join('');
     }
 
     let dayTimerInterval = null;
@@ -564,11 +586,12 @@
     }
 
     function renderVotePrompt(msg) {
+      $('voteTallyPanel').innerHTML = '';
+
       if (msg.silenced) {
         $('voteContent').innerHTML = `<div class="privacy-box"><p class="big">🤐 You are silenced today!</p><p class="muted">You cannot cast a vote this round.</p></div>`;
         $('voteSubmitBtn').onclick = () => {
           ws.send(JSON.stringify({ type: 'vote:submit', targetId: null }));
-          switchScreen('screen-vote-waiting');
         };
         switchScreen('screen-vote');
         return;
@@ -590,27 +613,17 @@
       $('voteSubmitBtn').onclick = () => {
         if (selected === null) return alert('Please select a player to vote for before submitting.');
         ws.send(JSON.stringify({ type: 'vote:submit', targetId: selected }));
-        switchScreen('screen-vote-waiting');
       };
       switchScreen('screen-vote');
     }
 
-    function renderDayResult(msg) {
-      let html = '';
-      if (msg.outcome === 'lynched') html += `<p class="center" style="margin:0.75rem 0;">⚖️ <strong>${msg.eliminatedName}</strong> was lynched by majority vote.</p>`;
-      else if (msg.outcome === 'idiot-survived') html += `<p class="center">🎭 <strong>${msg.eliminatedName}</strong> is the Idiot! Survives lynching but permanently loses voting rights.</p>`;
-      else if (msg.outcome === 'prince-survived') html += `<p class="center">👑 <strong>${msg.eliminatedName}</strong> is the Handsome Prince! Revealed role and was spared by the village.</p>`;
-      else html += `<p class="center" style="margin:0.75rem 0;">Tie or no majority votes. No one was lynched today.</p>`;
-
-      (msg.extraNotes || []).forEach(n => {
-        if (n.kind === 'tough-guy-died') html += `<p class="center" style="color:var(--neon-wolf);">🩸 Tough Guy (${n.name}) succumbed to wounds at sunset.</p>`;
-      });
-
-      $('dayResultContent').innerHTML = html;
-      switchScreen('screen-day-result');
+    function renderVoteRecap(recapLine) {
+      $('voteRecapContent').textContent = recapLine || '';
+      switchScreen('screen-vote-waiting');
     }
 
     function renderGameOver(msg) {
+      clearInterval(dayTimerInterval);
       $('gameOverText').textContent = msg.message;
       $('finalRolesList').innerHTML = msg.finalRoles.map(p => `
         <div style="padding:0.5rem 0; border-bottom:1px solid rgba(255,255,255,0.08); font-size:0.9rem;">
