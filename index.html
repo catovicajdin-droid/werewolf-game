@@ -323,6 +323,13 @@
             <input type="checkbox" id="allowSkipVotes">
           </div>
           <div class="toggle-row">
+            <label for="passiveTimerToggle">
+              <strong>Passive Role Buffer Timer (7s)</strong><br>
+              <span class="muted">Enforces a 7-second wait on passive roles to prevent telltale quick passes</span>
+            </label>
+            <input type="checkbox" id="passiveTimerToggle" checked>
+          </div>
+          <div class="toggle-row">
             <label for="hideVoteCounts">
               <strong>Hide Live Vote Numbers</strong><br>
               <span class="muted">Conceal running vote tallies during day voting</span>
@@ -440,7 +447,7 @@
       witch: { name: 'Witch', team: 'village', stackable: false, desc: 'Has 1 heal potion (shields entire village for the turn) and 1 poison potion for the game.' },
       avenger: { name: 'Avenger', team: 'village', stackable: false, desc: 'Each night, choose who you drag down with you if you are eliminated.' },
       seer_apprentice: { name: 'Seer apprentice', team: 'village', stackable: false, desc: 'Takes over as active Seer when the original Seer dies.' },
-      pacifist: { name: 'Pacifist', team: 'village', stackable: false, desc: 'Once per game, reveal a player role and cancel daytime voting.' },
+      pacifist: { name: 'Pacifist', team: 'village', stackable: false, desc: 'Once per game at night, choose a player to reveal their role to the town and cancel daytime voting for tomorrow.' },
       priest: { name: 'Priest', team: 'village', stackable: false, desc: 'Once per game, splash holy water: if target is werewolf they die, otherwise you die.' },
       mayor: { name: 'Mayor', team: 'village', stackable: false, desc: 'Once revealed, your daytime vote counts as 2.' },
       bodyguard: { name: 'Bodyguard', team: 'village', stackable: false, desc: 'Protect one player each night. If attacked by wolves, you die in their place.' },
@@ -497,6 +504,7 @@
       round: 1,
       phase: 'setup',
       nightWolfVotes: {},
+      wolfVoteHistory: [],
       nightActions: {},
       dayVotes: {},
       lovers: null,
@@ -506,6 +514,7 @@
       activeTrap: null,
       asleepId: null,
       silencedId: null,
+      pacifistRevealTarget: null,
       timerId: null,
       passiveTimerId: null,
       log: [],
@@ -521,6 +530,7 @@
       settings: {
         firstNightImmunity: true,
         allowSkipVotes: false,
+        passiveTimer: true,
         hideVoteCounts: true,
         dayTimer: 180
       }
@@ -682,6 +692,7 @@
 
       state.settings.firstNightImmunity = $('firstNightImmunity').checked;
       state.settings.allowSkipVotes = $('allowSkipVotes').checked;
+      state.settings.passiveTimer = $('passiveTimerToggle').checked;
       state.settings.hideVoteCounts = $('hideVoteCounts').checked;
       state.settings.dayTimer = parseInt($('dayTimer').value) || 0;
 
@@ -767,6 +778,7 @@
       state.toughGuyAttacked = false;
       state.silencedId = null;
       state.asleepId = null;
+      state.pacifistRevealTarget = null;
 
       beginNightPhase();
     }
@@ -774,6 +786,8 @@
     function beginNightPhase() {
       state.phase = 'night';
       state.nightWolfVotes = {};
+      state.wolfVoteHistory = [];
+      state.pacifistRevealTarget = null;
       state.nightActions = {
         protectId: null,
         bodyguardId: null,
@@ -837,7 +851,7 @@
         const tgt = state.players.find(p => p.id === state.headhunterTargets[player.id]);
         extra = `🎯 Your secret bounty target: <strong>${tgt ? tgt.name : 'Unknown'}</strong> (Get them lynched during the day to win!)`;
       } else if (state.lovers && state.lovers.includes(player.id)) {
-        const partnerId = state.lovers.find(id => id !== partnerId);
+        const partnerId = state.lovers.find(id => id !== player.id);
         const partner = state.players.find(p => p.id === partnerId);
         extra = `❤️ You are in love with <strong>${partner ? partner.name : 'Unknown'}</strong>!`;
       }
@@ -862,8 +876,29 @@
           if (state.round === 1 && state.settings.firstNightImmunity) {
             actHtml += `<p class="center" style="color:var(--solo); margin:0.4rem 0;">First Night Kill Protection is ON. Werewolves cannot eliminate tonight.</p>`;
           } else {
+            // Display previous werewolf votes so far
+            if (state.wolfVoteHistory.length > 0) {
+              actHtml += `
+                <div class="card" style="padding:0.6rem; margin-bottom:0.6rem; background:rgba(239,68,68,0.1); border-color:var(--wolf);">
+                  <strong style="font-size:0.85rem; color:var(--wolf);">🐺 Earlier Pack Votes Tonight:</strong>
+                  <div style="font-size:0.8rem; margin-top:0.25rem;">
+                    ${state.wolfVoteHistory.map(v => `<div>• <strong>${v.voterName}</strong> voted for <strong>${v.targetName}</strong></div>`).join('')}
+                  </div>
+                </div>
+              `;
+            }
+
+            const voteCounts = {};
+            state.wolfVoteHistory.forEach(v => {
+              voteCounts[v.targetId] = (voteCounts[v.targetId] || 0) + 1;
+            });
+
             actHtml += `<label><strong>Cast Your Individual Kill Vote:</strong></label>`;
-            actHtml += `<select id="wolfIndividualVote"><option value="">Select player to eliminate...</option>${nonWolves.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+            actHtml += `<select id="wolfIndividualVote"><option value="">Select player to eliminate...</option>${nonWolves.map(p => {
+              const count = voteCounts[p.id] || 0;
+              const indicator = count > 0 ? ` [🐺 ${count} vote${count > 1 ? 's' : ''}]` : '';
+              return `<option value="${p.id}">${p.name}${indicator}</option>`;
+            }).join('')}</select>`;
           }
 
           if (player.role === 'kitten_wolf' && !player.usedOneTime) {
@@ -884,6 +919,12 @@
             actHtml += `<label style="margin-top:0.6rem;"><strong>Junior Werewolf: Choose Revenge Target:</strong></label>`;
             actHtml += `<select id="juniorSelect"><option value="">Select target to drag down if you die...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
           }
+        }
+        // PACIFIST
+        else if (player.role === 'pacifist' && !player.usedOneTime) {
+          actHtml += `<label><strong>Pacifist: Public Revelation & Peace (Once per game):</strong></label>`;
+          actHtml += `<p class="muted" style="font-size:0.8rem; margin-bottom:0.4rem;">Select a player to publicly reveal their exact role to the town tomorrow morning and cancel daytime voting.</p>`;
+          actHtml += `<select id="pacifistTargetSelect"><option value="">Do not use tonight</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         }
         // AVENGER
         else if (player.role === 'avenger') {
@@ -1143,7 +1184,7 @@
 
       const confirmBtn = $('nightTurnConfirmBtn');
 
-      if (isPassive) {
+      if (isPassive && state.settings.passiveTimer) {
         let count = 7;
         confirmBtn.disabled = true;
         confirmBtn.textContent = `Please wait (${count}s)...`;
@@ -1189,6 +1230,7 @@
       const r = player.role;
       if (isWolf(r) && !(state.round === 1 && state.settings.firstNightImmunity)) return true;
       if (['doctor', 'bodyguard', 'serial_killer', 'arsonist', 'sect_leader', 'sect_hunter', 'grumpy_grandma', 'beast_hunter'].includes(r)) return true;
+      if (r === 'pacifist' && !player.usedOneTime) return true;
       if (r === 'witch' && (!state.witchHealUsed || !state.witchPoisonUsed)) return true;
       if (r === 'priest' && !player.usedOneTime) return true;
       if (r === 'medium' && !player.usedOneTime && state.players.some(p => !p.alive)) return true;
@@ -1205,6 +1247,7 @@
 
     function checkPlayerTookAction(player) {
       if (isWolf(player.role) && $('wolfIndividualVote') && $('wolfIndividualVote').value) return true;
+      if ($('pacifistTargetSelect') && $('pacifistTargetSelect').value) return true;
       if ($('doctorProtectSelect') && $('doctorProtectSelect').value) return true;
       if ($('bodyguardProtectSelect') && $('bodyguardProtectSelect').value) return true;
       if ($('witchHealVillageCheck') && $('witchHealVillageCheck').checked) return true;
@@ -1235,6 +1278,13 @@
         if (voteVal) {
           const weight = player.role === 'alpha_werewolf' ? 2 : 1;
           state.nightWolfVotes[voteVal] = (state.nightWolfVotes[voteVal] || 0) + weight;
+          const tgt = state.players.find(p => p.id === voteVal);
+          state.wolfVoteHistory.push({
+            voterId: player.id,
+            voterName: player.name,
+            targetId: voteVal,
+            targetName: tgt ? tgt.name : 'Unknown'
+          });
         }
         if ($('kittenBiteSelect') && $('kittenBiteSelect').value) {
           state.nightActions.kittenBiteId = parseFloat($('kittenBiteSelect').value);
@@ -1247,6 +1297,10 @@
         if ($('juniorSelect') && $('juniorSelect').value) {
           state.juniorTargets[player.id] = parseFloat($('juniorSelect').value);
         }
+      }
+      if ($('pacifistTargetSelect') && $('pacifistTargetSelect').value) {
+        state.pacifistRevealTarget = parseFloat($('pacifistTargetSelect').value);
+        player.usedOneTime = true;
       }
       if ($('avengerSelect') && $('avengerSelect').value) {
         state.avengerTargets[player.id] = parseFloat($('avengerSelect').value);
@@ -1363,11 +1417,11 @@
           if (victim.role === 'cursed_human') {
             victim.role = 'werewolf';
           } else if (victim.id === activeTrap) {
-            // Trap triggered
+            // Trap active
           } else if (victim.role === 'tough_guy') {
             state.toughGuyAttacked = victim.id;
           } else if (state.nightActions.witchHealUsedTurn) {
-            // Village shielded
+            // Shielded
           } else if (state.nightActions.bodyguardId && state.nightActions.bodyguardId.targetId === victim.id) {
             deadQueue.add(state.nightActions.bodyguardId.guardId);
           } else if (victim.role !== 'wise_man' && victim.id !== state.nightActions.protectId) {
@@ -1485,11 +1539,26 @@
       if (checkWin()) return;
       $('phaseIndicator').textContent = `Morning ${state.round}`;
       let html = `<h3>Morning ${state.round} Report</h3>`;
+
+      if (state.pacifistRevealTarget) {
+        const pt = state.players.find(p => p.id === state.pacifistRevealTarget);
+        if (pt) {
+          html += `
+            <div class="card" style="padding:0.75rem; border-color:var(--safe); background:rgba(16,185,129,0.1); margin-bottom:0.75rem;">
+              <strong style="color:var(--safe);">🕊️ The Pacifist has pacified the village!</strong>
+              <div style="margin-top:0.3rem;"><strong>${pt.name}</strong> was revealed to be <span class="role-badge badge-${ROLES[pt.role].team}">${ROLES[pt.role].name}</span>!</div>
+              <div class="muted" style="font-size:0.8rem; margin-top:0.2rem;">Daytime voting is cancelled for today.</div>
+            </div>
+          `;
+        }
+      }
+
       if (killed.length) {
-        html += killed.map(p => `<p class="center" style="margin:0.5rem 0;">☠️ <strong>${p.name}</strong> died during the night. (<span class="role-badge badge-${ROLES[p.role].team}">${ROLES[p.role].name}</span>)</p>`).join('');
+        html += killed.map(p => `<p class="center" style="margin:0.5rem 0;">☠️ <strong>${p.name}</strong> died during the night.</p>`).join('');
       } else {
         html += `<p class="center" style="margin:0.75rem 0;">🌅 A peaceful night. No one died.</p>`;
       }
+
       html += `<button id="startDayBtn" class="success big" style="margin-top:1rem; padding:0.9rem;">Start Day Discussion</button>`;
       $('gameContent').innerHTML = html;
       switchScreen('game');
@@ -1504,14 +1573,26 @@
 
       let currentSecs = state.settings.dayTimer;
       let html = `<h3>Town Discussion</h3>`;
+
       if (state.silencedId) {
         const s = state.players.find(p => p.id === state.silencedId);
         if (s) html += `<p class="center" style="color:var(--solo);">🤐 <strong>${s.name}</strong> has been silenced by Grumpy Grandma!</p>`;
       }
+
+      if (state.pacifistRevealTarget) {
+        html += `<p class="center" style="color:var(--safe); margin:0.5rem 0;">🕊️ Voting is cancelled today due to the Pacifist's ability.</p>`;
+      }
+
       if (currentSecs > 0) {
         html += `<div class="big center" id="timerDisplay" style="color:var(--solo); margin:1rem 0;">${Math.floor(currentSecs / 60)}:${(currentSecs % 60).toString().padStart(2, '0')}</div>`;
       }
-      html += `<button id="openPassVoteBtn" class="purple big" style="padding:0.9rem;">Begin Sequential Voting</button>`;
+
+      if (state.pacifistRevealTarget) {
+        html += `<button id="pacifistSkipBtn" class="danger big" style="padding:0.9rem;">End Day & Fall into Night</button>`;
+      } else {
+        html += `<button id="openPassVoteBtn" class="purple big" style="padding:0.9rem;">Begin Sequential Voting</button>`;
+      }
+
       $('gameContent').innerHTML = html;
 
       if (currentSecs > 0) {
@@ -1523,11 +1604,19 @@
         }, 1000);
       }
 
-      $('openPassVoteBtn').onclick = () => {
-        clearInterval(state.timerId);
-        state.turnIndex = 0;
-        showDayVoteHub();
-      };
+      if ($('pacifistSkipBtn')) {
+        $('pacifistSkipBtn').onclick = () => {
+          clearInterval(state.timerId);
+          state.round++;
+          if (!checkWin()) beginNightPhase();
+        };
+      } else if ($('openPassVoteBtn')) {
+        $('openPassVoteBtn').onclick = () => {
+          clearInterval(state.timerId);
+          state.turnIndex = 0;
+          showDayVoteHub();
+        };
+      }
     }
 
     function showDayVoteHub() {
