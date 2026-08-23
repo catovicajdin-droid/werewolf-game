@@ -264,9 +264,9 @@
       <div id="tab-players" class="tab-content active">
         <div class="card">
           <h3>Add Players (Seating Order)</h3>
-          <p class="muted" style="margin-bottom: 0.5rem;">Add players in order around the circle. The device will be passed sequentially.</p>
-          <input type="text" id="playerName" placeholder="Enter player name" maxlength="20" autocomplete="off">
-          <button id="addPlayerBtn">Add Player</button>
+          <p class="muted" style="margin-bottom: 0.5rem;">Add players in order around the circle. You can enter multiple names separated by commas (e.g. <em>Alex, Sam, Jordan</em>).</p>
+          <input type="text" id="playerName" placeholder="Enter player name(s), comma separated" autocomplete="off">
+          <button id="addPlayerBtn">Add Player(s)</button>
           <ul id="playersList" class="player-list"></ul>
         </div>
       </div>
@@ -334,11 +334,11 @@
           <div class="giant" id="hubPlayerName" style="color:var(--safe); margin-bottom: 1rem;">Player</div>
           <p class="muted" style="font-size:0.85rem;">Ensure only this player can see the screen before clicking.</p>
         </div>
-        <button id="hubActionBtn" class="purple big" style="padding:1rem;">I am [Player] — Open My Turn</button>
+        <button id="hubActionBtn" class="purple big" style="padding:1rem;">I am [Player] — Open My Screen</button>
       </div>
     </div>
 
-    <!-- UNIFIED NIGHT / ROLE VIEW (Role Discovery + Action in Same Screen) -->
+    <!-- UNIFIED NIGHT / ROLE VIEW -->
     <div id="nightTurn" class="screen">
       <div class="card">
         <div class="role-banner">
@@ -369,7 +369,7 @@
       </div>
     </div>
 
-    <!-- GENERAL GAMEPLAY SCREEN (Morning / Discussion / Results) -->
+    <!-- GENERAL GAMEPLAY SCREEN -->
     <div id="game" class="screen">
       <div class="card center" style="margin-bottom:0.5rem; padding:0.6rem;">
         <span id="phaseIndicator" class="big"></span>
@@ -404,7 +404,7 @@
     const ROLES = {
       // VILLAGE ALIGNED
       villager: { name: 'Villager', team: 'village', stackable: true, desc: 'Standard villager with no special night abilities.' },
-      seer: { name: 'Seer', team: 'village', stackable: false, desc: 'Each night, investigate a player to see if they are a Werewolf.' },
+      seer: { name: 'Seer', team: 'village', stackable: false, desc: 'Each night, investigate a player to uncover their exact secret role.' },
       doctor: { name: 'Doctor', team: 'village', stackable: false, desc: 'Each night, protect a player from werewolf elimination.' },
       witch: { name: 'Witch', team: 'village', stackable: false, desc: 'Has 1 heal potion and 1 poison potion for the entire match.' },
       avenger: { name: 'Avenger', team: 'village', stackable: false, desc: 'When you die, select another player to eliminate with you.' },
@@ -415,7 +415,7 @@
       bodyguard: { name: 'Bodyguard', team: 'village', stackable: false, desc: 'Protect one player each night. If attacked by wolves, you die in their place.' },
       detective: { name: 'Detective', team: 'village', stackable: false, desc: 'Each night, pick two players to see if they belong to the same team.' },
       wise_man: { name: 'Wise man', team: 'village', stackable: false, desc: 'Cannot be killed by werewolves during the night.' },
-      aura_seer: { name: 'Aura seer', team: 'village', stackable: false, desc: 'Each night, inspect a player to see if they have a werewolf aura.' },
+      aura_seer: { name: 'Aura seer', team: 'village', stackable: false, desc: 'Each night, inspect a player to see if they have a Good or Evil aura.' },
       handsome_prince: { name: 'Handsome prince', team: 'village', stackable: false, desc: 'The first time the village attempts to lynch you, you reveal your role and survive.' },
       sibling: { name: 'Sibling', team: 'village', stackable: true, desc: 'Knows the identities of other living Siblings.' },
       naughty_boy: { name: 'Naughty boy', team: 'village', stackable: false, desc: 'Once per game, swap the roles of two living players at night.' },
@@ -569,24 +569,38 @@
     };
     $('modalCloseBtn').onclick = () => $('infoModal').classList.remove('active');
 
-    $('addPlayerBtn').addEventListener('click', addPlayer);
-    $('playerName').addEventListener('keypress', e => { if (e.key === 'Enter') addPlayer(); });
+    $('addPlayerBtn').addEventListener('click', addPlayers);
+    $('playerName').addEventListener('keypress', e => { if (e.key === 'Enter') addPlayers(); });
     $('startBtn').addEventListener('click', startGame);
     $('newGameBtn').addEventListener('click', () => location.reload());
 
-    function addPlayer() {
-      const name = $('playerName').value.trim();
-      if (!name) return;
-      if (state.players.some(p => p.name.toLowerCase() === name.toLowerCase())) return alert('Name already added.');
-      state.players.push({
-        id: Date.now() + Math.random(),
-        name,
-        role: null,
-        alive: true,
-        usedOneTime: false,
-        bullets: 2,
-        arrows: 2
+    function addPlayers() {
+      const inputVal = $('playerName').value.trim();
+      if (!inputVal) return;
+
+      const rawNames = inputVal.split(',').map(n => n.trim()).filter(n => n.length > 0);
+      if (!rawNames.length) return;
+
+      let addedCount = 0;
+      rawNames.forEach(name => {
+        if (!state.players.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+          state.players.push({
+            id: Date.now() + Math.random(),
+            name,
+            role: null,
+            alive: true,
+            usedOneTime: false,
+            bullets: 2,
+            arrows: 2
+          });
+          addedCount++;
+        }
       });
+
+      if (addedCount === 0) {
+        alert('All entered names already exist.');
+      }
+
       $('playerName').value = '';
       renderPlayers();
     }
@@ -801,12 +815,12 @@
         }
       }
       else if (player.role === 'seer' || (player.role === 'seer_apprentice' && !alivePlayers().some(x => x.role === 'seer'))) {
-        actHtml += `<label><strong>Investigate a Player's Alignment:</strong></label>`;
+        actHtml += `<label><strong>Investigate a Player's Exact Secret Role:</strong></label>`;
         actHtml += `<select id="seerSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
-        actHtml += `<div id="seerInspectionResult" class="center big" style="margin:0.4rem 0;"></div><button type="button" class="secondary" id="seerInspectBtn">Reveal Alignment</button>`;
+        actHtml += `<div id="seerInspectionResult" class="center big" style="margin:0.4rem 0;"></div><button type="button" class="secondary" id="seerInspectBtn">Reveal Secret Role</button>`;
       }
       else if (player.role === 'aura_seer') {
-        actHtml += `<label><strong>Inspect Player Aura:</strong></label>`;
+        actHtml += `<label><strong>Inspect Player Aura (Good vs Evil):</strong></label>`;
         actHtml += `<select id="auraSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         actHtml += `<div id="auraResult" class="center big" style="margin:0.4rem 0;"></div><button type="button" class="secondary" id="auraInspectBtn">Scan Aura</button>`;
       }
@@ -876,8 +890,7 @@
           const tid = parseFloat($('seerSelect').value);
           const tgt = state.players.find(p => p.id === tid);
           if (!tgt) return;
-          const isW = isWolf(tgt.role);
-          $('seerInspectionResult').innerHTML = `${tgt.name} is ${isW ? '<span class="role-badge badge-wolf">A WEREWOLF</span>' : '<span class="role-badge badge-village">NOT A WEREWOLF</span>'}`;
+          $('seerInspectionResult').innerHTML = `${tgt.name} is <span class="role-badge badge-${ROLES[tgt.role].team}">${ROLES[tgt.role].name}</span>`;
         };
       }
       if ($('auraInspectBtn')) {
