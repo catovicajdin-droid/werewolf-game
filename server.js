@@ -4,7 +4,8 @@ const crypto = require('crypto');
 const express = require('express');
 const QRCode = require('qrcode');
 const { WebSocketServer } = require('ws');
-const ROLES = require('./public/shared/roles.js');
+const engine = require('./gameEngine.js');
+const ROLES = engine.ROLES;
 
 const PORT = process.env.PORT || 3000;
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I to avoid mis-scans/typos
@@ -67,110 +68,6 @@ function send(ws, msg) {
   if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
 }
 
-function isWolf(role) {
-  return !!(ROLES[role] && ROLES[role].team === 'wolf');
-}
-
-function shuffle(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = crypto.randomInt(i + 1);
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-// Mirrors sanitizeRoleDependencies() in index.html so the two role-assignment
-// paths (single-device and multi-device) stay behaviorally identical.
-function sanitizeRoleDependencies(rolesList, total) {
-  let roles = [...rolesList];
-
-  if (roles.includes('seer_apprentice') && !roles.includes('seer')) {
-    const idx = roles.indexOf('seer_apprentice');
-    if (roles.length < total) roles.push('seer');
-    else roles[idx] = 'seer';
-  }
-
-  if (roles.includes('sect_hunter') && !roles.includes('sect_leader')) {
-    const idx = roles.indexOf('sect_hunter');
-    roles[idx] = 'villager';
-  }
-
-  const sibCount = roles.filter(r => r === 'sibling').length;
-  if (sibCount === 1) {
-    if (roles.length < total) roles.push('sibling');
-    else {
-      const idx = roles.indexOf('sibling');
-      roles[idx] = 'villager';
-    }
-  }
-
-  return roles;
-}
-
-// Mirrors startGame()'s role-assignment logic in index.html.
-function computeRoles(total, config) {
-  const { assignmentMode, roleToggles, customRoleCounts } = config;
-  let roles = [];
-
-  if (assignmentMode === 'custom') {
-    Object.keys(ROLES).forEach(key => {
-      const count = (customRoleCounts && customRoleCounts[key]) || 0;
-      for (let i = 0; i < count; i++) roles.push(key);
-    });
-    if (roles.length > total) {
-      throw new Error('Assigned roles exceed total players.');
-    }
-  } else if (assignmentMode === 'full_random') {
-    const wolfCount = Math.max(1, Math.floor(total / 3.5));
-    roles.push('werewolf');
-    const wolfKeys = Object.keys(ROLES).filter(k => ROLES[k].team === 'wolf' && k !== 'werewolf');
-    shuffle(wolfKeys);
-    for (let i = 1; i < wolfCount; i++) roles.push(wolfKeys[i % wolfKeys.length]);
-
-    const specialKeys = Object.keys(ROLES).filter(k => ROLES[k].team !== 'wolf' && k !== 'villager');
-    shuffle(specialKeys);
-    for (let i = 0; i < total - wolfCount && i < specialKeys.length; i++) {
-      if (Math.random() > 0.3) roles.push(specialKeys[i]);
-    }
-    roles = sanitizeRoleDependencies(roles, total);
-  } else {
-    // selected_random (default)
-    const enabledKeys = Object.keys(ROLES).filter(k => roleToggles && roleToggles[k]);
-    if (!enabledKeys.length) throw new Error('No roles are enabled.');
-
-    const enabledWolves = enabledKeys.filter(k => ROLES[k].team === 'wolf');
-    const enabledNonWolves = enabledKeys.filter(k => ROLES[k].team !== 'wolf' && k !== 'villager');
-
-    const targetWolves = Math.max(1, Math.floor(total / 3.5));
-    for (let i = 0; i < targetWolves; i++) {
-      if (enabledWolves.length > 0) {
-        roles.push(enabledWolves[Math.floor(Math.random() * enabledWolves.length)]);
-      } else {
-        roles.push('werewolf');
-      }
-    }
-
-    shuffle(enabledNonWolves);
-    enabledNonWolves.forEach(k => {
-      if (roles.length >= total) return;
-      if (k === 'seer_apprentice' && !roleToggles['seer']) return;
-      if (k === 'sect_hunter' && !roleToggles['sect_leader']) return;
-
-      if (Math.random() < 0.65) {
-        const r = ROLES[k];
-        let qty = r.stackable ? Math.min(total - roles.length, Math.floor(Math.random() * 2) + 1) : 1;
-        if (k === 'sibling') qty = Math.max(2, qty);
-        for (let q = 0; q < qty && roles.length < total; q++) roles.push(k);
-      }
-    });
-
-    roles = sanitizeRoleDependencies(roles, total);
-  }
-
-  while (roles.length < total) roles.push('villager');
-  return shuffle(roles);
-}
-
 function publicRoster(room) {
   return Array.from(room.players.values()).map(p => ({
     id: p.id,
@@ -188,9 +85,12 @@ function broadcastRoster(room) {
 function assignRoles(room) {
   const players = Array.from(room.players.values());
   const total = players.length;
-  const roles = computeRoles(total, room.config);
+  const roles = engine.computeRoles(total, room.config);
 
-  players.forEach((p, i) => { p.role = roles[i]; });
+  players.forEach((p, i) => {
+    p.role = roles[i];
+    engine.initPlayerRuntime(p);
+  });
 
   room.headhunterTargets = {};
   players.filter(p => p.role === 'headhunter').forEach(hh => {
@@ -205,8 +105,8 @@ function assignRoles(room) {
 // index.html (fellow wolves, siblings, headhunter target) - each piece is
 // only ever attached to the specific player's own payload, never broadcast.
 function buildExtraFor(player, players, room) {
-  if (isWolf(player.role)) {
-    const others = players.filter(x => isWolf(x.role) && x.id !== player.id).map(x => x.name);
+  if (engine.isWolf(player.role)) {
+    const others = players.filter(x => engine.isWolf(x.role) && x.id !== player.id).map(x => x.name);
     return { kind: 'wolfpack', names: others };
   }
   if (player.role === 'sibling') {
@@ -396,8 +296,15 @@ async function handleMessage(ws, msg) {
         roleToggles: msg.roleToggles || {},
         customRoleCounts: msg.customRoleCounts || {}
       };
+      const settings = {
+        firstNightImmunity: !!msg.settings?.firstNightImmunity,
+        allowSkipVotes: !!msg.settings?.allowSkipVotes,
+        hideVoteCounts: !!msg.settings?.hideVoteCounts,
+        dayTimer: Number.isFinite(msg.settings?.dayTimer) ? Math.max(0, msg.settings.dayTimer) : 180
+      };
 
       assignRoles(room);
+      room.game = engine.freshGameState(settings);
       room.phase = 'roles-assigned';
       sendPrivateRoles(room);
       broadcastRoster(room);
@@ -405,9 +312,237 @@ async function handleMessage(ws, msg) {
       break;
     }
 
+    case 'host:begin-night': {
+      const room = rooms.get(ws.roomCode);
+      if (!room || !ws.isHost || !room.game) return;
+      if (room.phase !== 'roles-assigned' && room.phase !== 'day-results') return;
+      startNight(room);
+      break;
+    }
+
+    case 'night:inspect': {
+      const room = rooms.get(ws.roomCode);
+      if (!room || !room.game || room.phase !== 'night') return;
+      const player = room.players.get(ws.playerId);
+      if (!player || !player.alive) return;
+      const players = Array.from(room.players.values());
+      const result = engine.applyInspect(room.game, players, player, msg.inspectKind, msg.targetId, msg.targetId2);
+      send(ws, { type: 'night:inspect-result', fieldId: msg.fieldId, result });
+      break;
+    }
+
+    case 'night:submit': {
+      const room = rooms.get(ws.roomCode);
+      if (!room || !room.game || room.phase !== 'night') return;
+      const player = room.players.get(ws.playerId);
+      if (!player || !player.alive) return;
+      if (room.game.submitted[player.id]) return; // already submitted this night
+
+      const players = Array.from(room.players.values());
+      engine.applyNightSubmission(room.game, players, player, msg.submission || {});
+      room.game.submitted[player.id] = true;
+
+      broadcastNightProgress(room);
+      maybeResolveNight(room);
+      break;
+    }
+
+    case 'host:begin-day': {
+      const room = rooms.get(ws.roomCode);
+      if (!room || !ws.isHost || !room.game || room.phase !== 'morning') return;
+      room.phase = 'day-discussion';
+      const votingCancelled = !!room.game.pacifistRevealTarget || room.game.votingDisabledThisRound;
+      const payload = {
+        type: 'day:begin',
+        round: room.game.round,
+        silencedName: room.game.silencedId ? (room.players.get(room.game.silencedId) || {}).name || null : null,
+        votingCancelled,
+        cancelReason: room.game.pacifistRevealTarget ? 'pacifist' : (room.game.votingDisabledThisRound ? 'vigilante' : null),
+        dayTimerSeconds: room.game.settings.dayTimer
+      };
+      send(room.hostWs, payload);
+      room.players.forEach(p => send(p.ws, payload));
+      break;
+    }
+
+    case 'host:skip-to-night': {
+      const room = rooms.get(ws.roomCode);
+      if (!room || !ws.isHost || !room.game || room.phase !== 'day-discussion') return;
+      advanceRoundOrEnd(room);
+      break;
+    }
+
+    case 'host:open-vote': {
+      const room = rooms.get(ws.roomCode);
+      if (!room || !ws.isHost || !room.game || room.phase !== 'day-discussion') return;
+      startVote(room);
+      break;
+    }
+
+    case 'vote:submit': {
+      const room = rooms.get(ws.roomCode);
+      if (!room || !room.game || room.phase !== 'day-vote') return;
+      const player = room.players.get(ws.playerId);
+      if (!player || !player.alive) return;
+      if (room.game.submitted[player.id]) return;
+
+      engine.applyVoteSubmission(room.game, player, msg.targetId || null);
+      room.game.submitted[player.id] = true;
+
+      broadcastNightProgress(room);
+      maybeResolveVotes(room);
+      break;
+    }
+
+    case 'host:next-night': {
+      const room = rooms.get(ws.roomCode);
+      if (!room || !ws.isHost || !room.game || room.phase !== 'day-results') return;
+      advanceRoundOrEnd(room);
+      break;
+    }
+
     default:
       break;
   }
+}
+
+function startNight(room) {
+  engine.beginNight(room.game);
+  const players = Array.from(room.players.values());
+  const living = players.filter(p => p.alive);
+  room.game.pendingSubmitters = living.map(p => p.id);
+  room.phase = 'night';
+
+  living.forEach(player => {
+    const prompt = engine.buildNightPrompt(room.game, players, room.headhunterTargets, player);
+    send(player.ws, {
+      type: 'night:prompt',
+      round: room.game.round,
+      role: player.role,
+      roleName: ROLES[player.role].name,
+      team: ROLES[player.role].team,
+      roleDesc: ROLES[player.role].desc,
+      ...prompt
+    });
+  });
+
+  broadcastNightProgress(room);
+  maybeResolveNight(room);
+}
+
+function broadcastNightProgress(room) {
+  if (!room.game) return;
+  const pending = room.phase === 'day-vote' ? room.game.pendingVoters : room.game.pendingSubmitters;
+  const players = Array.from(room.players.values());
+  const payload = {
+    type: room.phase === 'day-vote' ? 'vote:progress' : 'night:progress',
+    round: room.game.round,
+    players: (pending || []).map(id => {
+      const p = players.find(x => x.id === id);
+      return { name: p ? p.name : 'Unknown', submitted: !!room.game.submitted[id] };
+    })
+  };
+  send(room.hostWs, payload);
+  room.players.forEach(p => send(p.ws, payload));
+}
+
+function maybeResolveNight(room) {
+  const pending = room.game.pendingSubmitters || [];
+  if (!pending.every(id => room.game.submitted[id])) return;
+
+  const players = Array.from(room.players.values());
+  const { killed, gameOverMsg } = engine.resolveNight(room.game, players, room.headhunterTargets);
+
+  if (gameOverMsg) {
+    endGame(room, gameOverMsg);
+    return;
+  }
+
+  room.phase = 'morning';
+  const notes = [];
+  if (room.game.pacifistRevealTarget) {
+    const pt = players.find(p => p.id === room.game.pacifistRevealTarget);
+    if (pt) notes.push({ kind: 'pacifist', name: pt.name, roleName: ROLES[pt.role].name, team: ROLES[pt.role].team });
+  }
+  if (room.game.nightActions.mayorRevealedThisTurn) {
+    const mayor = players.find(p => p.role === 'mayor');
+    if (mayor) notes.push({ kind: 'mayor-revealed', name: mayor.name });
+  }
+  if (room.game.nightActions.gunnerShot) {
+    const g = players.find(p => p.id === room.game.nightActions.gunnerShot.gunnerId);
+    if (g) notes.push({ kind: 'gunner-shot', name: g.name });
+  }
+  if (room.game.nightActions.marksmanExecute && room.game.nightActions.marksmanExecute.targetId) {
+    const m = players.find(p => p.id === room.game.nightActions.marksmanExecute.marksmanId);
+    if (m) notes.push({ kind: 'marksman-executed', name: m.name });
+  }
+  if (room.game.nightActions.vigilanteAction && room.game.nightActions.vigilanteAction.mode === 'inspect') {
+    notes.push({ kind: 'vigilante-inspect' });
+  }
+
+  const payload = {
+    type: 'morning:report',
+    round: room.game.round,
+    killedNames: killed.map(p => p.name),
+    notes
+  };
+  send(room.hostWs, payload);
+  room.players.forEach(p => send(p.ws, payload));
+}
+
+function startVote(room) {
+  room.phase = 'day-vote';
+  room.game.dayVotes = {};
+  room.game.submitted = {};
+  const players = Array.from(room.players.values());
+  const living = players.filter(p => p.alive);
+  room.game.pendingVoters = living.map(p => p.id);
+
+  living.forEach(player => {
+    const prompt = engine.buildVotePrompt(room.game, players, player);
+    send(player.ws, { type: 'vote:prompt', round: room.game.round, ...prompt });
+    if (prompt.silenced) room.game.submitted[player.id] = true;
+  });
+
+  broadcastNightProgress(room);
+  maybeResolveVotes(room);
+}
+
+function maybeResolveVotes(room) {
+  const pending = room.game.pendingVoters || [];
+  if (!pending.every(id => room.game.submitted[id])) return;
+
+  const players = Array.from(room.players.values());
+  const result = engine.resolveVotes(room.game, players, room.headhunterTargets);
+
+  if (result.gameOverMsg) {
+    endGame(room, result.gameOverMsg);
+    return;
+  }
+
+  room.phase = 'day-results';
+  const payload = { type: 'day:result', round: room.game.round, ...result };
+  send(room.hostWs, payload);
+  room.players.forEach(p => send(p.ws, payload));
+}
+
+function advanceRoundOrEnd(room) {
+  const players = Array.from(room.players.values());
+  const winMsg = engine.checkWin(room.game, players);
+  if (winMsg) {
+    endGame(room, winMsg);
+    return;
+  }
+  room.game.round++;
+  startNight(room);
+}
+
+function endGame(room, message) {
+  room.phase = 'game-over';
+  const players = Array.from(room.players.values());
+  const payload = { type: 'game:over', message, finalRoles: engine.buildFinalRoles(players) };
+  send(room.hostWs, payload);
+  room.players.forEach(p => send(p.ws, payload));
 }
 
 // Periodically reap abandoned rooms (no host, no connected players, old).

@@ -46,8 +46,80 @@
             <p id="roleDesc" class="muted" style="margin-top:0.5rem; line-height:1.4;"></p>
             <div id="roleExtra" style="margin-top:0.75rem; font-size:0.9rem; color:var(--neon-solo);"></div>
           </div>
-          <p class="muted center" style="font-size:0.8rem;">Networked night/day actions aren't wired up yet — for this round, follow along on the host's single-device screen. Keep this tab open; your role stays here if you need to check it again.</p>
+          <p class="muted center" style="font-size:0.8rem;">Keep this tab open — the game continues here automatically once the host begins the night.</p>
         </div>
+      </div>
+    </div>
+
+    <div id="screen-night" class="screen">
+      <div class="card">
+        <div class="role-banner">
+          <p class="muted" id="nightRoundHeading" style="font-size:0.8rem; margin-bottom:0.2rem;"></p>
+          <span id="nightRoleBadge" class="role-badge"></span>
+          <h2 id="nightRoleTitle" style="margin-top:0.4rem;"></h2>
+          <p id="nightRoleDesc" class="muted" style="font-size:0.85rem; margin-top:0.25rem; line-height:1.4;"></p>
+          <div id="nightExtra" style="margin-top:0.5rem; font-size:0.85rem; color:var(--neon-solo);"></div>
+        </div>
+        <div id="nightMessage" class="center" style="margin: 0.5rem 0;"></div>
+        <div id="nightFields" class="action-box"></div>
+        <button id="nightSubmitBtn" class="purple big" style="margin-top:1rem; padding:0.9rem;">Confirm Action</button>
+      </div>
+    </div>
+
+    <div id="screen-night-waiting" class="screen">
+      <div class="card center">
+        <p class="muted">Waiting for other players to finish their night actions...</p>
+        <ul id="nightProgressList" class="player-list" style="text-align:left; margin-top:0.75rem;"></ul>
+      </div>
+    </div>
+
+    <div id="screen-morning" class="screen">
+      <div class="card">
+        <h3 id="morningHeading"></h3>
+        <div id="morningNotes"></div>
+        <div id="morningKilled"></div>
+        <p class="muted center" style="margin-top:1rem;">Waiting for the host to start day discussion...</p>
+      </div>
+    </div>
+
+    <div id="screen-day" class="screen">
+      <div class="card center">
+        <h3>Town Discussion</h3>
+        <div id="daySilenceNote"></div>
+        <div id="dayCancelNote"></div>
+        <div class="big center" id="dayTimerDisplay" style="color:var(--neon-solo); margin:1.25rem 0; font-size:2rem; font-weight:800; text-shadow:0 0 15px var(--neon-solo-glow);"></div>
+        <p class="muted">Waiting for the host to open voting...</p>
+      </div>
+    </div>
+
+    <div id="screen-vote" class="screen">
+      <div class="card">
+        <div class="center" style="margin-bottom:0.5rem;"><span class="muted">Day Vote</span></div>
+        <div id="voteContent"></div>
+        <button id="voteSubmitBtn" class="danger big" style="margin-top:0.5rem; padding:0.9rem;">Submit Vote</button>
+      </div>
+    </div>
+
+    <div id="screen-vote-waiting" class="screen">
+      <div class="card center">
+        <p class="muted">Waiting for other players to vote...</p>
+        <ul id="voteProgressList" class="player-list" style="text-align:left; margin-top:0.75rem;"></ul>
+      </div>
+    </div>
+
+    <div id="screen-day-result" class="screen">
+      <div class="card">
+        <h3>Vote Results</h3>
+        <div id="dayResultContent"></div>
+        <p class="muted center" style="margin-top:1rem;">Waiting for the host to continue...</p>
+      </div>
+    </div>
+
+    <div id="screen-game-over" class="screen">
+      <h1>Game Over</h1>
+      <div class="card center">
+        <div class="big" id="gameOverText" style="margin-bottom:1rem; color:var(--neon-solo); text-shadow:0 0 20px var(--neon-solo-glow);"></div>
+        <div id="finalRolesList" style="text-align:left; margin:1rem 0;"></div>
       </div>
     </div>
 
@@ -139,6 +211,24 @@
           haveRole = true;
           renderRole(msg);
           switchScreen('screen-reveal');
+        } else if (msg.type === 'night:prompt') {
+          renderNightPrompt(msg);
+        } else if (msg.type === 'night:inspect-result') {
+          renderInspectResult(msg.fieldId, msg.result);
+        } else if (msg.type === 'night:progress') {
+          renderProgressList('nightProgressList', msg.players);
+        } else if (msg.type === 'morning:report') {
+          renderMorning(msg);
+        } else if (msg.type === 'day:begin') {
+          renderDayBegin(msg);
+        } else if (msg.type === 'vote:prompt') {
+          renderVotePrompt(msg);
+        } else if (msg.type === 'vote:progress') {
+          renderProgressList('voteProgressList', msg.players);
+        } else if (msg.type === 'day:result') {
+          renderDayResult(msg);
+        } else if (msg.type === 'game:over') {
+          renderGameOver(msg);
         } else if (msg.type === 'room:kicked') {
           clearSeat(myRoomCode);
           if (msg.reason === 'seat-reclaimed') {
@@ -198,6 +288,337 @@
         $('revealBtn').parentElement.style.display = 'none';
         $('roleCardWrap').style.display = '';
       };
+    }
+
+    // ---- Night action: a generic renderer for the field descriptors the
+    // server sends (select / checkbox / info / inspect / inspect-pair /
+    // select-pair) - one renderer handles all 46 roles instead of a
+    // bespoke branch per role, mirroring the same descriptor shapes
+    // gameEngine.js's buildNightPrompt() produces server-side. ----
+    let inspectResultEls = {};
+    let inspectKindByField = {};
+    let nightGetters = {};
+
+    function renderFields(fields) {
+      const container = $('nightFields');
+      container.innerHTML = '';
+      const getters = {};
+
+      const makeSelect = (id, placeholder, options, defaultValue) => {
+        const sel = document.createElement('select');
+        sel.id = id;
+        if (placeholder) {
+          const o = document.createElement('option');
+          o.value = '';
+          o.textContent = placeholder;
+          sel.appendChild(o);
+        }
+        options.forEach(o => {
+          const el = document.createElement('option');
+          el.value = o.value;
+          el.textContent = o.label;
+          sel.appendChild(el);
+        });
+        if (defaultValue) sel.value = defaultValue;
+        return sel;
+      };
+
+      fields.forEach(f => {
+        const wrap = document.createElement('div');
+        wrap.style.marginBottom = '0.6rem';
+
+        if (f.type === 'info') {
+          wrap.className = 'muted';
+          if (f.label) {
+            wrap.innerHTML = `<strong>${f.label}</strong>` + (f.list ? `<div style="font-size:0.85rem; margin-top:0.3rem;">${f.list.map(x => `• ${x}`).join('<br>')}</div>` : '');
+          } else {
+            wrap.textContent = f.text;
+          }
+          container.appendChild(wrap);
+          return;
+        }
+
+        if (f.type === 'select') {
+          const label = document.createElement('label');
+          label.innerHTML = `<strong>${f.label}</strong>`;
+          const sel = makeSelect(f.id, f.placeholder, f.options, f.defaultValue);
+          wrap.appendChild(label);
+          wrap.appendChild(sel);
+          container.appendChild(wrap);
+          getters[f.id] = () => sel.value || null;
+
+          if (f.dependsOn) {
+            const update = () => {
+              const c = document.getElementById(f.dependsOn.id);
+              wrap.style.display = (c && c.value === f.dependsOn.equals) ? '' : 'none';
+            };
+            setTimeout(() => {
+              const c = document.getElementById(f.dependsOn.id);
+              if (c) c.addEventListener('change', update);
+              update();
+            }, 0);
+          }
+          return;
+        }
+
+        if (f.type === 'checkbox') {
+          const label = document.createElement('label');
+          label.style.cssText = 'display:flex; align-items:center; gap:0.6rem; cursor:pointer;';
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.id = f.id;
+          cb.style.cssText = 'width:1.4rem; height:1.4rem; margin:0;';
+          const span = document.createElement('span');
+          span.innerHTML = `<strong>${f.label}</strong>${f.description ? ' - ' + f.description : ''}`;
+          label.appendChild(cb);
+          label.appendChild(span);
+          wrap.appendChild(label);
+          container.appendChild(wrap);
+          getters[f.id] = () => cb.checked;
+          return;
+        }
+
+        if (f.type === 'inspect') {
+          const label = document.createElement('label');
+          label.innerHTML = `<strong>${f.label}</strong>`;
+          const sel = makeSelect(f.id, f.placeholder, f.options);
+          const resultDiv = document.createElement('div');
+          resultDiv.style.margin = '0.4rem 0';
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'secondary';
+          btn.textContent = 'Inspect';
+          btn.onclick = () => {
+            if (!sel.value) return;
+            ws.send(JSON.stringify({ type: 'night:inspect', fieldId: f.id, inspectKind: f.inspectKind, targetId: sel.value }));
+            btn.disabled = true;
+            sel.disabled = true;
+          };
+          wrap.appendChild(label);
+          wrap.appendChild(sel);
+          wrap.appendChild(resultDiv);
+          wrap.appendChild(btn);
+          container.appendChild(wrap);
+          inspectResultEls[f.id] = resultDiv;
+          inspectKindByField[f.id] = f.inspectKind;
+          getters[f.id] = () => null;
+          return;
+        }
+
+        if (f.type === 'inspect-pair') {
+          const label = document.createElement('label');
+          label.innerHTML = `<strong>${f.label}</strong>`;
+          const sel1 = makeSelect(f.ids[0], f.placeholders[0], f.options);
+          const sel2 = makeSelect(f.ids[1], f.placeholders[1], f.options);
+          const resultDiv = document.createElement('div');
+          resultDiv.style.margin = '0.4rem 0';
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'secondary';
+          btn.textContent = 'Compare';
+          btn.onclick = () => {
+            if (!sel1.value || !sel2.value) return;
+            if (sel1.value === sel2.value) return alert('Please select two different players.');
+            ws.send(JSON.stringify({ type: 'night:inspect', fieldId: f.ids[0], inspectKind: f.inspectKind, targetId: sel1.value, targetId2: sel2.value }));
+            btn.disabled = true;
+            sel1.disabled = true;
+            sel2.disabled = true;
+          };
+          wrap.appendChild(label);
+          wrap.appendChild(sel1);
+          wrap.appendChild(sel2);
+          wrap.appendChild(resultDiv);
+          wrap.appendChild(btn);
+          container.appendChild(wrap);
+          inspectResultEls[f.ids[0]] = resultDiv;
+          inspectKindByField[f.ids[0]] = f.inspectKind;
+          getters[f.ids[0]] = () => null;
+          getters[f.ids[1]] = () => null;
+          return;
+        }
+
+        if (f.type === 'select-pair') {
+          const label = document.createElement('label');
+          label.innerHTML = `<strong>${f.label}</strong>`;
+          const sel1 = makeSelect(f.ids[0], f.placeholders[0], f.options);
+          const sel2 = makeSelect(f.ids[1], f.placeholders[1], f.options);
+          wrap.appendChild(label);
+          wrap.appendChild(sel1);
+          wrap.appendChild(sel2);
+          container.appendChild(wrap);
+          getters[f.ids[0]] = () => sel1.value || null;
+          getters[f.ids[1]] = () => sel2.value || null;
+          return;
+        }
+      });
+
+      return getters;
+    }
+
+    function renderInspectResult(fieldId, result) {
+      const el = inspectResultEls[fieldId];
+      const kind = inspectKindByField[fieldId];
+      if (!el || !result) return;
+      if (kind === 'seer' || kind === 'wolfseer') {
+        el.innerHTML = `<div class="inspection-result-box"><div style="font-weight:700; margin-bottom:0.25rem;">${result.name} is: <span class="role-badge badge-${result.team}">${result.roleName}</span></div><div class="muted" style="font-size:0.8rem; line-height:1.4;">${result.desc}</div></div>`;
+      } else if (kind === 'aura') {
+        el.innerHTML = `<div class="inspection-result-box"><strong>${result.name}'s Aura:</strong> ${result.evil ? '<span class="role-badge badge-wolf">EVIL</span>' : '<span class="role-badge badge-village">GOOD</span>'}</div>`;
+      } else if (kind === 'sorcerer') {
+        el.innerHTML = `<div class="inspection-result-box">${result.name} is ${result.match ? '<span class="role-badge badge-wolf">SEER OR WEREWOLF</span>' : '<span class="role-badge badge-village">NEITHER</span>'}</div>`;
+      } else if (kind === 'detective') {
+        el.innerHTML = `<div class="inspection-result-box">${result.name1} & ${result.name2} are ${result.same ? '<span class="role-badge badge-village">ON THE SAME TEAM</span>' : '<span class="role-badge badge-wolf">ON DIFFERENT TEAMS</span>'}</div>`;
+      }
+    }
+
+    function renderNightPrompt(msg) {
+      inspectResultEls = {};
+      inspectKindByField = {};
+
+      $('nightRoundHeading').textContent = `Night ${msg.round}`;
+      $('nightRoleBadge').className = `role-badge badge-${msg.team}`;
+      $('nightRoleBadge').textContent = `${msg.team.toUpperCase()} TEAM`;
+      $('nightRoleTitle').textContent = msg.roleName;
+      $('nightRoleDesc').textContent = msg.roleDesc;
+
+      let extraHtml = '';
+      if (msg.extra) {
+        if (msg.extra.kind === 'wolfpack') {
+          const entries = msg.extra.wolves.map(w => w.alive
+            ? `<strong>${w.name}</strong> <span style="color:var(--neon-safe); font-size:0.75rem;">(Alive)</span>`
+            : `<del style="opacity:0.55;">${w.name}</del> <span style="color:var(--neon-wolf); font-size:0.75rem;">(Dead ☠️)</span>`
+          ).join(', ');
+          extraHtml = msg.extra.wolves.length ? `🐺 Fellow Werewolves: ${entries}` : `🐺 You are the only Werewolf.`;
+        } else if (msg.extra.kind === 'siblings') {
+          extraHtml = `👥 Siblings: <strong>${msg.extra.names.length ? msg.extra.names.join(', ') : 'None'}</strong>`;
+        } else if (msg.extra.kind === 'headhunter_target') {
+          extraHtml = `🎯 Your secret bounty target: <strong>${msg.extra.name || 'Unknown'}</strong>`;
+        } else if (msg.extra.kind === 'lover') {
+          extraHtml = `❤️ You are in love with <strong>${msg.extra.name || 'Unknown'}</strong>!`;
+        }
+      }
+      $('nightExtra').innerHTML = extraHtml;
+
+      $('nightMessage').textContent = msg.message || '';
+      nightGetters = renderFields(msg.fields || []);
+
+      $('nightSubmitBtn').onclick = () => {
+        const submission = {};
+        Object.keys(nightGetters).forEach(k => { submission[k] = nightGetters[k](); });
+        ws.send(JSON.stringify({ type: 'night:submit', submission }));
+        switchScreen('screen-night-waiting');
+      };
+
+      switchScreen('screen-night');
+    }
+
+    function renderProgressList(listId, players) {
+      $(listId).innerHTML = players.map(p => `<li><span>${p.submitted ? '✅' : '⏳'} ${p.name}</span></li>`).join('');
+    }
+
+    function renderMorning(msg) {
+      $('morningHeading').textContent = `Morning ${msg.round} Report`;
+      let notesHtml = '';
+      (msg.notes || []).forEach(n => {
+        if (n.kind === 'pacifist') {
+          notesHtml += `<div class="card" style="padding:0.85rem; border-color:var(--neon-safe); background:rgba(52,211,153,0.1); margin-bottom:0.75rem;"><strong style="color:var(--neon-safe);">🕊️ The Pacifist has pacified the village!</strong><div style="margin-top:0.3rem;"><strong>${n.name}</strong> was revealed to be <span class="role-badge badge-${n.team}">${n.roleName}</span>!</div><div class="muted" style="font-size:0.8rem; margin-top:0.2rem;">Daytime voting is cancelled for today.</div></div>`;
+        } else if (n.kind === 'mayor-revealed') {
+          notesHtml += `<div class="card" style="padding:0.85rem; border-color:var(--neon-solo); background:rgba(251,191,36,0.1); margin-bottom:0.75rem;"><strong style="color:var(--neon-solo);">🎖️ ${n.name} has revealed themselves as the Mayor!</strong><div class="muted" style="font-size:0.8rem; margin-top:0.2rem;">Their vote now counts as 2 for the rest of the game.</div></div>`;
+        } else if (n.kind === 'gunner-shot') {
+          notesHtml += `<div class="card" style="padding:0.85rem; border-color:var(--neon-village); background:rgba(56,189,248,0.1); margin-bottom:0.75rem;"><strong style="color:var(--neon-village);">🔫 ${n.name} revealed themselves as the Gunner and fired a shot!</strong></div>`;
+        } else if (n.kind === 'marksman-executed') {
+          notesHtml += `<div class="card" style="padding:0.85rem; border-color:var(--neon-solo); background:rgba(251,191,36,0.1); margin-bottom:0.75rem;"><strong style="color:var(--neon-solo);">🎯 ${n.name} the Marksman executed their marked target!</strong></div>`;
+        } else if (n.kind === 'vigilante-inspect') {
+          notesHtml += `<div class="card" style="padding:0.85rem; border-color:var(--neon-village); background:rgba(56,189,248,0.1); margin-bottom:0.75rem;"><strong style="color:var(--neon-village);">🔍 The Vigilante inspected a role last night.</strong><div class="muted" style="font-size:0.8rem; margin-top:0.2rem;">Voting is cancelled today.</div></div>`;
+        }
+      });
+      $('morningNotes').innerHTML = notesHtml;
+      $('morningKilled').innerHTML = msg.killedNames.length
+        ? msg.killedNames.map(n => `<p class="center" style="margin:0.5rem 0;">☠️ <strong>${n}</strong> died during the night.</p>`).join('')
+        : `<p class="center" style="margin:0.75rem 0;">🌅 A peaceful night. No one died.</p>`;
+      switchScreen('screen-morning');
+    }
+
+    let dayTimerInterval = null;
+
+    function renderDayBegin(msg) {
+      $('daySilenceNote').innerHTML = msg.silencedName ? `<p style="color:var(--neon-solo);">🤐 <strong>${msg.silencedName}</strong> has been silenced by Grumpy Grandma!</p>` : '';
+      $('dayCancelNote').innerHTML = msg.votingCancelled
+        ? (msg.cancelReason === 'pacifist'
+          ? `<p style="color:var(--neon-safe); margin:0.5rem 0;">🕊️ Voting is cancelled today due to the Pacifist's ability.</p>`
+          : `<p style="color:var(--neon-safe); margin:0.5rem 0;">🔍 Voting is cancelled today due to the Vigilante's inspection.</p>`)
+        : '';
+      clearInterval(dayTimerInterval);
+      if (msg.dayTimerSeconds > 0) {
+        let secs = msg.dayTimerSeconds;
+        const update = () => { $('dayTimerDisplay').textContent = `${Math.floor(secs / 60)}:${(secs % 60).toString().padStart(2, '0')}`; };
+        update();
+        dayTimerInterval = setInterval(() => {
+          secs--;
+          if (secs <= 0) clearInterval(dayTimerInterval);
+          else update();
+        }, 1000);
+      } else {
+        $('dayTimerDisplay').textContent = '';
+      }
+      switchScreen('screen-day');
+    }
+
+    function renderVotePrompt(msg) {
+      if (msg.silenced) {
+        $('voteContent').innerHTML = `<div class="privacy-box"><p class="big">🤐 You are silenced today!</p><p class="muted">You cannot cast a vote this round.</p></div>`;
+        $('voteSubmitBtn').onclick = () => {
+          ws.send(JSON.stringify({ type: 'vote:submit', targetId: null }));
+          switchScreen('screen-vote-waiting');
+        };
+        switchScreen('screen-vote');
+        return;
+      }
+
+      let selected = null;
+      let html = `<p class="muted center" style="margin-bottom:0.75rem;">Select who you want the village to eliminate:</p><div class="grid-2">`;
+      msg.options.forEach(o => {
+        html += `<button type="button" class="secondary vote-target-btn" data-value="${o.value}">${o.label}</button>`;
+      });
+      html += `</div>`;
+      $('voteContent').innerHTML = html;
+      document.querySelectorAll('.vote-target-btn').forEach(b => {
+        b.onclick = () => {
+          selected = b.dataset.value;
+          document.querySelectorAll('.vote-target-btn').forEach(x => x.className = `secondary vote-target-btn ${x === b ? 'success' : ''}`);
+        };
+      });
+      $('voteSubmitBtn').onclick = () => {
+        if (selected === null) return alert('Please select a player to vote for before submitting.');
+        ws.send(JSON.stringify({ type: 'vote:submit', targetId: selected }));
+        switchScreen('screen-vote-waiting');
+      };
+      switchScreen('screen-vote');
+    }
+
+    function renderDayResult(msg) {
+      let html = '';
+      if (msg.outcome === 'lynched') html += `<p class="center" style="margin:0.75rem 0;">⚖️ <strong>${msg.eliminatedName}</strong> was lynched by majority vote.</p>`;
+      else if (msg.outcome === 'idiot-survived') html += `<p class="center">🎭 <strong>${msg.eliminatedName}</strong> is the Idiot! Survives lynching but permanently loses voting rights.</p>`;
+      else if (msg.outcome === 'prince-survived') html += `<p class="center">👑 <strong>${msg.eliminatedName}</strong> is the Handsome Prince! Revealed role and was spared by the village.</p>`;
+      else html += `<p class="center" style="margin:0.75rem 0;">Tie or no majority votes. No one was lynched today.</p>`;
+
+      (msg.extraNotes || []).forEach(n => {
+        if (n.kind === 'tough-guy-died') html += `<p class="center" style="color:var(--neon-wolf);">🩸 Tough Guy (${n.name}) succumbed to wounds at sunset.</p>`;
+      });
+
+      $('dayResultContent').innerHTML = html;
+      switchScreen('screen-day-result');
+    }
+
+    function renderGameOver(msg) {
+      $('gameOverText').textContent = msg.message;
+      $('finalRolesList').innerHTML = msg.finalRoles.map(p => `
+        <div style="padding:0.5rem 0; border-bottom:1px solid rgba(255,255,255,0.08); font-size:0.9rem;">
+          <div><strong>${p.name}</strong>: <span class="role-badge badge-${p.team}">${p.roleName}</span> ${p.alive ? '<span style="color:var(--neon-safe); font-weight:700;">🟢 Survived</span>' : '<span style="color:var(--neon-wolf); font-weight:700;">🔴 Eliminated</span>'}</div>
+          ${!p.alive && p.deathReason ? `<div class="muted" style="font-size:0.75rem; margin-top:0.2rem;">Cause of Death: <em>${p.deathReason}</em></div>` : ''}
+        </div>
+      `).join('');
+      switchScreen('screen-game-over');
     }
 
     $('joinBtn').addEventListener('click', () => {
