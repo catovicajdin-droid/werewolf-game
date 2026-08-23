@@ -37,7 +37,15 @@ function getLanAddresses() {
   const addrs = [];
   for (const name of Object.keys(nets)) {
     for (const net of nets[name] || []) {
-      if (net.family === 'IPv4' && !net.internal) addrs.push(net.address);
+      // Skip link-local (169.254.x.x) addresses - they show up when an
+      // interface has no real network yet and aren't reachable by other
+      // devices. Phones in particular can report several live interfaces
+      // at once (e.g. Wi-Fi client + a personal hotspot), so every
+      // remaining candidate is kept rather than guessing which is "the"
+      // one - the host picks whichever actually works for their players.
+      if (net.family === 'IPv4' && !net.internal && !net.address.startsWith('169.254.')) {
+        addrs.push(net.address);
+      }
     }
   }
   return addrs;
@@ -285,11 +293,14 @@ async function handleMessage(ws, msg) {
       ws.isHost = true;
 
       const addrs = getLanAddresses();
-      const host = addrs[0] || 'localhost';
-      const joinUrl = `http://${host}:${PORT}/player.html?room=${room.code}`;
-      const qrDataUrl = await QRCode.toDataURL(joinUrl, { margin: 1, width: 320 });
+      const candidates = addrs.length ? addrs : ['localhost'];
+      const options = await Promise.all(candidates.map(async (ip) => {
+        const joinUrl = `http://${ip}:${PORT}/player.html?room=${room.code}`;
+        const qrDataUrl = await QRCode.toDataURL(joinUrl, { margin: 1, width: 280 });
+        return { ip, joinUrl, qrDataUrl };
+      }));
 
-      send(ws, { type: 'room:created', code: room.code, joinUrl, qrDataUrl });
+      send(ws, { type: 'room:created', code: room.code, options });
       break;
     }
 
