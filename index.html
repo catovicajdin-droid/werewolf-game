@@ -264,7 +264,7 @@
       <div id="tab-players" class="tab-content active">
         <div class="card">
           <h3>Add Players (Seating Order)</h3>
-          <p class="muted" style="margin-bottom: 0.5rem;">Add players in order around the circle. You can enter multiple names separated by commas (e.g. <em>Alex, Sam, Jordan</em>).</p>
+          <p class="muted" style="margin-bottom: 0.5rem;">Add players in order around the circle. Enter multiple names separated by commas (e.g. <em>Alex, Sam, Jordan</em>).</p>
           <input type="text" id="playerName" placeholder="Enter player name(s), comma separated" autocomplete="off">
           <button id="addPlayerBtn">Add Player(s)</button>
           <ul id="playersList" class="player-list"></ul>
@@ -277,7 +277,7 @@
           <h3>Role Allocation Mode</h3>
           <select id="assignmentMode">
             <option value="selected_random">Mode 2: Random from Enabled Roles (Toggles)</option>
-            <option value="full_random">Mode 1: Full Random (All 40 Roles Pool)</option>
+            <option value="full_random">Mode 1: Full Random (All Roles Pool)</option>
             <option value="custom">Manual / Fixed Counts</option>
           </select>
           <p id="modeDesc" class="muted">Toggle which roles are allowed. The game randomly determines if they appear and how many appear.</p>
@@ -407,7 +407,7 @@
       seer: { name: 'Seer', team: 'village', stackable: false, desc: 'Each night, investigate a player to uncover their exact secret role.' },
       doctor: { name: 'Doctor', team: 'village', stackable: false, desc: 'Each night, protect a player from werewolf elimination.' },
       witch: { name: 'Witch', team: 'village', stackable: false, desc: 'Has 1 heal potion and 1 poison potion for the entire match.' },
-      avenger: { name: 'Avenger', team: 'village', stackable: false, desc: 'When you die, select another player to eliminate with you.' },
+      avenger: { name: 'Avenger', team: 'village', stackable: false, desc: 'Each night, choose who you drag down with you if you are eliminated.' },
       seer_apprentice: { name: 'Seer apprentice', team: 'village', stackable: false, desc: 'Takes over as active Seer when the original Seer dies.' },
       pacifist: { name: 'Pacifist', team: 'village', stackable: false, desc: 'Once per game, reveal a player role and cancel daytime voting.' },
       priest: { name: 'Priest', team: 'village', stackable: false, desc: 'Once per game, splash holy water: if target is werewolf they die, otherwise you die.' },
@@ -434,7 +434,7 @@
 
       // WEREWOLF ALIGNED
       werewolf: { name: 'Werewolf', team: 'wolf', stackable: true, desc: 'Picks a victim together with fellow wolves each night.' },
-      junior_werewolf: { name: 'Junior werewolf', team: 'wolf', stackable: false, desc: 'When killed, chooses one player to take down with them.' },
+      junior_werewolf: { name: 'Junior werewolf', team: 'wolf', stackable: false, desc: 'Selects a player at night to drag down if you are killed.' },
       lone_wolf: { name: 'Lone wolf', team: 'wolf', stackable: false, desc: 'Regular werewolf, but only wins if they are the last surviving werewolf.' },
       cursed_human: { name: 'Cursed Human', team: 'wolf', stackable: false, desc: 'Villager until attacked by werewolves, then converts into a full werewolf.' },
       kitten_wolf: { name: 'Kitten wolf', team: 'wolf', stackable: false, desc: 'Once per game, can bite a player to convert them into a werewolf instead of killing.' },
@@ -479,6 +479,12 @@
       log: [],
       witchHealUsed: false,
       witchPoisonUsed: false,
+      headhunterTargets: {},
+      graveRobberTargets: {},
+      avengerTargets: {},
+      juniorTargets: {},
+      toughGuyAttacked: false,
+      marksmanTargets: {},
       settings: {
         firstNightImmunity: true,
         hideVoteCounts: true,
@@ -702,6 +708,14 @@
         p.arrows = 2;
       });
 
+      // Target assignments for Headhunter
+      state.players.filter(p => p.role === 'headhunter').forEach(hh => {
+        const targets = state.players.filter(p => p.id !== hh.id && p.role !== 'headhunter');
+        if (targets.length) {
+          state.headhunterTargets[hh.id] = targets[Math.floor(Math.random() * targets.length)].id;
+        }
+      });
+
       state.round = 1;
       state.lovers = null;
       state.sect = [];
@@ -716,7 +730,7 @@
       state.nightWolfVotes = {};
       state.nightActions = {
         protectId: null,
-        seerTarget: null,
+        bodyguardId: null,
         serialKillId: null,
         witchPoisonId: null,
         arsonistAction: null,
@@ -726,7 +740,9 @@
         asleepTarget: null,
         silencedTarget: null,
         redLadyStay: null,
-        beastTrapTarget: null
+        beastTrapTarget: null,
+        kittenBiteId: null,
+        reviveId: null
       };
 
       state.turnIndex = 0;
@@ -767,6 +783,9 @@
       } else if (player.role === 'sibling') {
         const otherSiblings = state.players.filter(p => p.role === 'sibling' && p.id !== player.id);
         extra = `👥 Siblings: <strong>${otherSiblings.length ? otherSiblings.map(s => s.name).join(', ') : 'None'}</strong>`;
+      } else if (player.role === 'headhunter' && state.headhunterTargets[player.id]) {
+        const tgt = state.players.find(p => p.id === state.headhunterTargets[player.id]);
+        extra = `🎯 Your secret bounty target: <strong>${tgt ? tgt.name : 'Unknown'}</strong> (Get them lynched during the day to win!)`;
       } else if (state.lovers && state.lovers.includes(player.id)) {
         const partnerId = state.lovers.find(id => id !== player.id);
         const partner = state.players.find(p => p.id === partnerId);
@@ -790,7 +809,9 @@
 
       const living = alivePlayers();
       const otherLiving = living.filter(p => p.id !== player.id);
+      const deadPlayers = state.players.filter(p => !p.alive);
 
+      // WEREWOLF PACK & SUB-ROLES
       if (isWolf(player.role)) {
         const nonWolves = living.filter(p => !isWolf(p.role));
 
@@ -801,8 +822,11 @@
           actHtml += `<select id="wolfIndividualVote"><option value="">Select player to eliminate...</option>${nonWolves.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         }
 
-        if (player.role === 'nightmare_werewolf' && !player.usedOneTime) {
-          actHtml += `<label style="margin-top:0.6rem;"><strong>Put a player to sleep for tonight:</strong></label>`;
+        if (player.role === 'kitten_wolf' && !player.usedOneTime) {
+          actHtml += `<label style="margin-top:0.6rem;"><strong>Kitten Wolf: Bite & Convert to Werewolf instead:</strong></label>`;
+          actHtml += `<select id="kittenBiteSelect"><option value="">Do not bite tonight</option>${nonWolves.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        } else if (player.role === 'nightmare_werewolf' && !player.usedOneTime) {
+          actHtml += `<label style="margin-top:0.6rem;"><strong>Nightmare Werewolf: Put a player to sleep for tonight:</strong></label>`;
           actHtml += `<select id="nightmareTarget"><option value="">None (skip)</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         } else if (player.role === 'wolf_seer') {
           actHtml += `<label style="margin-top:0.6rem;"><strong>Wolf Seer: Uncover Exact Role:</strong></label>`;
@@ -812,22 +836,49 @@
           actHtml += `<label style="margin-top:0.6rem;"><strong>Sorcerer: Check if Seer or Werewolf:</strong></label>`;
           actHtml += `<select id="sorcererTarget"><option value="">Select player to check...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
           actHtml += `<div id="sorcererResult" class="center big" style="margin:0.4rem 0;"></div><button type="button" class="secondary" id="sorcererInspectBtn">Check Target</button>`;
+        } else if (player.role === 'junior_werewolf') {
+          actHtml += `<label style="margin-top:0.6rem;"><strong>Junior Werewolf: Choose Revenge Target:</strong></label>`;
+          actHtml += `<select id="juniorSelect"><option value="">Select target to drag down if you die...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         }
       }
+      // AVENGER: Nightly target selection
+      else if (player.role === 'avenger') {
+        const curTarget = state.avengerTargets[player.id];
+        const curName = curTarget ? state.players.find(p => p.id === curTarget)?.name : 'None';
+        actHtml += `<p class="muted">Current revenge target: <strong>${curName}</strong></p>`;
+        actHtml += `<label><strong>Select/Update who you drag down with you if you die:</strong></label>`;
+        actHtml += `<select id="avengerSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+      }
+      // SEER & SEER APPRENTICE
       else if (player.role === 'seer' || (player.role === 'seer_apprentice' && !alivePlayers().some(x => x.role === 'seer'))) {
         actHtml += `<label><strong>Investigate a Player's Exact Secret Role:</strong></label>`;
         actHtml += `<select id="seerSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         actHtml += `<div id="seerInspectionResult" class="center big" style="margin:0.4rem 0;"></div><button type="button" class="secondary" id="seerInspectBtn">Reveal Secret Role</button>`;
       }
+      // AURA SEER
       else if (player.role === 'aura_seer') {
         actHtml += `<label><strong>Inspect Player Aura (Good vs Evil):</strong></label>`;
         actHtml += `<select id="auraSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         actHtml += `<div id="auraResult" class="center big" style="margin:0.4rem 0;"></div><button type="button" class="secondary" id="auraInspectBtn">Scan Aura</button>`;
       }
-      else if (player.role === 'doctor' || player.role === 'bodyguard') {
-        actHtml += `<label><strong>Select a Player to Protect Tonight:</strong></label>`;
-        actHtml += `<select id="protectSelect"><option value="">Select player...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+      // DETECTIVE
+      else if (player.role === 'detective') {
+        actHtml += `<label><strong>Compare Team of Two Players:</strong></label>`;
+        actHtml += `<select id="det1"><option value="">Player 1...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        actHtml += `<select id="det2"><option value="">Player 2...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        actHtml += `<div id="detResult" class="center big" style="margin:0.4rem 0;"></div><button type="button" class="secondary" id="detInspectBtn">Compare Teams</button>`;
       }
+      // DOCTOR
+      else if (player.role === 'doctor') {
+        actHtml += `<label><strong>Select a Player to Protect Tonight:</strong></label>`;
+        actHtml += `<select id="doctorProtectSelect"><option value="">Select player...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+      }
+      // BODYGUARD
+      else if (player.role === 'bodyguard') {
+        actHtml += `<label><strong>Select a Player to Bodyguard (You die in their place if attacked):</strong></label>`;
+        actHtml += `<select id="bodyguardProtectSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+      }
+      // WITCH
       else if (player.role === 'witch') {
         actHtml += `<p class="muted" style="margin-bottom:0.4rem;">Potions: Heal: <strong>${state.witchHealUsed ? 'Used' : 'Available'}</strong> | Poison: <strong>${state.witchPoisonUsed ? 'Used' : 'Available'}</strong></p>`;
         if (!state.witchPoisonUsed) {
@@ -835,14 +886,26 @@
           actHtml += `<select id="witchPoisonSelect"><option value="">Do not poison anyone</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         }
       }
+      // PRIEST
       else if (player.role === 'priest' && !player.usedOneTime) {
         actHtml += `<label><strong>Throw Holy Water (Once per game):</strong></label>`;
         actHtml += `<select id="priestSelect"><option value="">Skip for tonight</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
+      // MEDIUM
+      else if (player.role === 'medium' && !player.usedOneTime) {
+        actHtml += `<label><strong>Medium: Revive One Dead Player (Once per game):</strong></label>`;
+        if (deadPlayers.length > 0) {
+          actHtml += `<select id="mediumReviveSelect"><option value="">Do not revive anyone tonight</option>${deadPlayers.map(p => `<option value="${p.id}">${p.name} (${ROLES[p.role].name})</option>`).join('')}</select>`;
+        } else {
+          actHtml += `<p class="muted">No dead players to revive currently.</p>`;
+        }
+      }
+      // SERIAL KILLER
       else if (player.role === 'serial_killer') {
         actHtml += `<label><strong>Choose Night Victim:</strong></label>`;
         actHtml += `<select id="serialKillSelect"><option value="">Select target...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
+      // ARSONIST
       else if (player.role === 'arsonist') {
         actHtml += `<p class="muted" style="margin-bottom:0.4rem;">Currently Doused: <strong>${state.doused.length ? state.players.filter(p => state.doused.includes(p.id)).map(p => p.name).join(', ') : 'None'}</strong></p>`;
         actHtml += `<label><strong>Arsonist Action:</strong></label>`;
@@ -852,39 +915,65 @@
         actHtml += `<select id="douse2"><option value="">Target 2...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         actHtml += `</div>`;
       }
+      // SECT LEADER
       else if (player.role === 'sect_leader') {
         const sectNames = state.players.filter(p => state.sect.includes(p.id)).map(p => p.name);
         actHtml += `<p class="muted" style="margin-bottom:0.4rem;">Current Sect: <strong>${sectNames.length ? sectNames.join(', ') : 'Just you'}</strong></p>`;
         actHtml += `<label><strong>Convert a Player to your Sect:</strong></label>`;
         actHtml += `<select id="sectConvertSelect"><option value="">Select target...</option>${otherLiving.filter(p => !state.sect.includes(p.id)).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
+      // SECT HUNTER
       else if (player.role === 'sect_hunter') {
         actHtml += `<label><strong>Hunt Sect Member:</strong></label>`;
         actHtml += `<select id="sectHuntSelect"><option value="">Select player to check & hunt...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
+      // GRAVE ROBBER (Night 1)
+      else if (player.role === 'grave_robber' && state.round === 1) {
+        actHtml += `<label><strong>Choose Target (Inherit their role if they die):</strong></label>`;
+        actHtml += `<select id="graveRobberSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+      }
+      // CUPID (Night 1)
       else if (player.role === 'cupid' && state.round === 1 && !state.lovers) {
         actHtml += `<label><strong>Bind Two Lovers for the Match:</strong></label>`;
         actHtml += `<select id="cupidLover1"><option value="">Lover 1...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
         actHtml += `<select id="cupidLover2"><option value="">Lover 2...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
+      // GRUMPY GRANDMA
       else if (player.role === 'grumpy_grandma') {
         actHtml += `<label><strong>Silence a Player for Tomorrow:</strong></label>`;
         actHtml += `<select id="grandmaSilenceSelect"><option value="">Select player...</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
+      // RED LADY
       else if (player.role === 'red_lady') {
         actHtml += `<label><strong>Visit a Player's House Tonight:</strong></label>`;
         actHtml += `<select id="redLadySelect"><option value="">Stay at home</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
+      // NAUGHTY BOY
+      else if (player.role === 'naughty_boy' && !player.usedOneTime) {
+        actHtml += `<label><strong>Swap Roles of Two Players (Once per game):</strong></label>`;
+        actHtml += `<select id="swap1"><option value="">Player 1...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+        actHtml += `<select id="swap2"><option value="">Player 2...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+      }
+      // BEAST HUNTER
       else if (player.role === 'beast_hunter') {
         actHtml += `<label><strong>Set Delayed Beast Trap:</strong></label>`;
         actHtml += `<select id="beastTrapSelect"><option value="">Select player to trap...</option>${living.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
       }
+      // MARKSMAN
+      else if (player.role === 'marksman' && player.arrows > 0) {
+        const curTarget = state.marksmanTargets[player.id];
+        const curName = curTarget ? state.players.find(p => p.id === curTarget)?.name : 'None';
+        actHtml += `<p class="muted">Arrows: <strong>${player.arrows}</strong> | Current Target: <strong>${curName}</strong></p>`;
+        actHtml += `<label><strong>Mark or Change Target:</strong></label>`;
+        actHtml += `<select id="marksmanSelect"><option value="">Keep current target</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
+      }
       else {
-        actHtml += `<p class="center" style="margin: 0.5rem 0;">😴 <strong>You sleep peacefully through the night.</strong></p><p class="muted center" style="font-size:0.8rem;">No night action required.</p>`;
+        actHtml += `<p class="center" style="margin: 0.5rem 0;">😴 <strong>You sleep peacefully through the night.</strong></p><p class="muted center" style="font-size:0.8rem;">No active night decisions needed.</p>`;
       }
 
       actionArea.innerHTML = actHtml;
 
+      // Event listeners for inline inspection tools
       if ($('seerInspectBtn')) {
         $('seerInspectBtn').onclick = () => {
           const tid = parseFloat($('seerSelect').value);
@@ -900,6 +989,15 @@
           if (!tgt) return;
           const isEvil = isWolf(tgt.role) || tgt.role === 'serial_killer' || tgt.role === 'arsonist';
           $('auraResult').innerHTML = `${tgt.name}'s aura is ${isEvil ? '<span class="role-badge badge-wolf">EVIL</span>' : '<span class="role-badge badge-village">GOOD</span>'}`;
+        };
+      }
+      if ($('detInspectBtn')) {
+        $('detInspectBtn').onclick = () => {
+          const t1 = state.players.find(p => p.id === parseFloat($('det1').value));
+          const t2 = state.players.find(p => p.id === parseFloat($('det2').value));
+          if (!t1 || !t2) return;
+          const same = ROLES[t1.role].team === ROLES[t2.role].team;
+          $('detResult').innerHTML = `${t1.name} & ${t2.name} are ${same ? '<span class="role-badge badge-village">ON THE SAME TEAM</span>' : '<span class="role-badge badge-wolf">ON DIFFERENT TEAMS</span>'}`;
         };
       }
       if ($('wolfSeerInspectBtn')) {
@@ -926,19 +1024,33 @@
       }
 
       $('nightTurnConfirmBtn').onclick = () => {
+        // Collect Actions
         if (isWolf(player.role)) {
           const voteVal = $('wolfIndividualVote') ? parseFloat($('wolfIndividualVote').value) : null;
           if (voteVal) {
             const weight = player.role === 'alpha_werewolf' ? 2 : 1;
             state.nightWolfVotes[voteVal] = (state.nightWolfVotes[voteVal] || 0) + weight;
           }
+          if ($('kittenBiteSelect') && $('kittenBiteSelect').value) {
+            state.nightActions.kittenBiteId = parseFloat($('kittenBiteSelect').value);
+            player.usedOneTime = true;
+          }
           if ($('nightmareTarget') && $('nightmareTarget').value) {
             state.nightActions.asleepTarget = parseFloat($('nightmareTarget').value);
             player.usedOneTime = true;
           }
+          if ($('juniorSelect') && $('juniorSelect').value) {
+            state.juniorTargets[player.id] = parseFloat($('juniorSelect').value);
+          }
         }
-        if ($('protectSelect') && $('protectSelect').value) {
-          state.nightActions.protectId = parseFloat($('protectSelect').value);
+        if ($('avengerSelect') && $('avengerSelect').value) {
+          state.avengerTargets[player.id] = parseFloat($('avengerSelect').value);
+        }
+        if ($('doctorProtectSelect') && $('doctorProtectSelect').value) {
+          state.nightActions.protectId = parseFloat($('doctorProtectSelect').value);
+        }
+        if ($('bodyguardProtectSelect') && $('bodyguardProtectSelect').value) {
+          state.nightActions.bodyguardId = { guardId: player.id, targetId: parseFloat($('bodyguardProtectSelect').value) };
         }
         if ($('witchPoisonSelect') && $('witchPoisonSelect').value) {
           state.nightActions.witchPoisonId = parseFloat($('witchPoisonSelect').value);
@@ -946,6 +1058,10 @@
         }
         if ($('priestSelect') && $('priestSelect').value) {
           state.nightActions.priestTarget = { priestId: player.id, targetId: parseFloat($('priestSelect').value) };
+          player.usedOneTime = true;
+        }
+        if ($('mediumReviveSelect') && $('mediumReviveSelect').value) {
+          state.nightActions.reviveId = parseFloat($('mediumReviveSelect').value);
           player.usedOneTime = true;
         }
         if ($('serialKillSelect') && $('serialKillSelect').value) {
@@ -968,6 +1084,9 @@
         if ($('sectHuntSelect') && $('sectHuntSelect').value) {
           state.nightActions.sectHunterTarget = parseFloat($('sectHuntSelect').value);
         }
+        if ($('graveRobberSelect') && $('graveRobberSelect').value) {
+          state.graveRobberTargets[player.id] = parseFloat($('graveRobberSelect').value);
+        }
         if ($('cupidLover1') && $('cupidLover2')) {
           const l1 = parseFloat($('cupidLover1').value);
           const l2 = parseFloat($('cupidLover2').value);
@@ -979,8 +1098,21 @@
         if ($('redLadySelect') && $('redLadySelect').value) {
           state.nightActions.redLadyStay = { ladyId: player.id, targetId: parseFloat($('redLadySelect').value) };
         }
+        if ($('swap1') && $('swap2') && $('swap1').value && $('swap2').value && $('swap1').value !== $('swap2').value) {
+          const p1 = state.players.find(p => p.id === parseFloat($('swap1').value));
+          const p2 = state.players.find(p => p.id === parseFloat($('swap2').value));
+          if (p1 && p2) {
+            const tmp = p1.role;
+            p1.role = p2.role;
+            p2.role = tmp;
+            player.usedOneTime = true;
+          }
+        }
         if ($('beastTrapSelect') && $('beastTrapSelect').value) {
           state.beastTrapped = parseFloat($('beastTrapSelect').value);
+        }
+        if ($('marksmanSelect') && $('marksmanSelect').value) {
+          state.marksmanTargets[player.id] = parseFloat($('marksmanSelect').value);
         }
 
         state.turnIndex++;
@@ -996,6 +1128,25 @@
       state.activeTrap = state.beastTrapped;
       state.beastTrapped = null;
 
+      // Medium revive processing
+      if (state.nightActions.reviveId) {
+        const rev = state.players.find(p => p.id === state.nightActions.reviveId);
+        if (rev) {
+          rev.alive = true;
+          log(`Medium revived ${rev.name} back from the dead!`);
+        }
+      }
+
+      // Kitten Wolf conversion
+      if (state.nightActions.kittenBiteId) {
+        const b = state.players.find(p => p.id === state.nightActions.kittenBiteId);
+        if (b) {
+          b.role = 'werewolf';
+          log(`Kitten wolf bit ${b.name}, converting them into a Werewolf!`);
+        }
+      }
+
+      // Werewolf victim processing
       let maxVotes = 0, wolfVictims = [];
       Object.entries(state.nightWolfVotes).forEach(([id, count]) => {
         if (count > maxVotes) {
@@ -1007,7 +1158,7 @@
       });
 
       let wolfKilledId = null;
-      if (wolfVictims.length > 0) {
+      if (wolfVictims.length > 0 && !state.nightActions.kittenBiteId) {
         wolfKilledId = wolfVictims[Math.floor(Math.random() * wolfVictims.length)];
         const victim = state.players.find(p => p.id === wolfKilledId);
 
@@ -1017,6 +1168,12 @@
             log(`Cursed Human was attacked by werewolves and converted into a Werewolf!`);
           } else if (victim.id === activeTrap) {
             log(`Werewolves attacked the Beast Hunter trap! Attack thwarted.`);
+          } else if (victim.role === 'tough_guy') {
+            state.toughGuyAttacked = victim.id;
+            log(`Tough Guy was attacked at night but hung on until tomorrow!`);
+          } else if (state.nightActions.bodyguardId && state.nightActions.bodyguardId.targetId === victim.id) {
+            deadQueue.add(state.nightActions.bodyguardId.guardId);
+            log(`Bodyguard took the fatal blow for their protected target!`);
           } else if (victim.role !== 'wise_man' && victim.id !== state.nightActions.protectId) {
             deadQueue.add(victim.id);
           }
@@ -1078,11 +1235,67 @@
         p.alive = false;
         dead.push(p);
 
+        // Avenger drag down
+        if (p.role === 'avenger' && state.avengerTargets[p.id]) {
+          const draggedId = state.avengerTargets[p.id];
+          queue.push(draggedId);
+          log(`Avenger eliminated, taking ${state.players.find(x => x.id === draggedId)?.name} down with them!`);
+        }
+
+        // Junior werewolf drag down
+        if (p.role === 'junior_werewolf' && state.juniorTargets[p.id]) {
+          const draggedId = state.juniorTargets[p.id];
+          queue.push(draggedId);
+          log(`Junior Werewolf died, taking down ${state.players.find(x => x.id === draggedId)?.name}!`);
+        }
+
+        // Mad Scientist neighbor blast
+        if (p.role === 'mad_scientist') {
+          const living = state.players.filter(x => x.alive && x.id !== p.id);
+          const pIndex = state.players.findIndex(x => x.id === p.id);
+          if (living.length > 0) {
+            // Find adjacent seated neighbors
+            for (let i = 1; i < state.players.length; i++) {
+              const left = state.players[(pIndex - i + state.players.length) % state.players.length];
+              if (left.alive) { queue.push(left.id); break; }
+            }
+            for (let i = 1; i < state.players.length; i++) {
+              const right = state.players[(pIndex + i) % state.players.length];
+              if (right.alive && !queue.includes(right.id)) { queue.push(right.id); break; }
+            }
+            log(`Mad Scientist released a toxic cloud affecting adjacent seats!`);
+          }
+        }
+
+        // Grave Robber inheritance
+        Object.entries(state.graveRobberTargets).forEach(([grId, tgtId]) => {
+          if (tgtId === p.id) {
+            const gr = state.players.find(x => x.id === parseFloat(grId) && x.alive);
+            if (gr) {
+              gr.role = p.role;
+              log(`Grave Robber inherited the role of ${p.name} (${ROLES[p.role].name})!`);
+            }
+          }
+        });
+
+        // Lovers link
         if (state.lovers && state.lovers.includes(id)) {
           const partnerId = state.lovers.find(x => x !== id);
           if (partnerId) queue.push(partnerId);
         }
 
+        // Headhunter target check
+        Object.entries(state.headhunterTargets).forEach(([hhId, tgtId]) => {
+          if (tgtId === p.id && state.phase === 'night') {
+            const hh = state.players.find(x => x.id === parseFloat(hhId));
+            if (hh) {
+              hh.role = 'villager';
+              log(`Headhunter target died outside of village lynch. Headhunter is now a Villager.`);
+            }
+          }
+        });
+
+        // President check
         if (p.role === 'president') {
           endGame('The President died! Werewolves Win.');
           return dead;
@@ -1213,6 +1426,13 @@
       let html = `<h3>Day ${state.round} Vote Results</h3>`;
       if (tied.length === 1 && max > 0) {
         const elim = state.players.find(p => p.id === tied[0]);
+
+        // Check Headhunter win
+        const hhWinner = state.players.find(p => p.alive && p.role === 'headhunter' && state.headhunterTargets[p.id] === elim.id);
+        if (hhWinner) {
+          return endGame(`🎯 Headhunter (${hhWinner.name}) successfully got their target (${elim.name}) lynched and wins!`);
+        }
+
         if (elim.role === 'fool') {
           return endGame(`🎉 The Fool (${elim.name}) was lynched by the village and wins the game!`);
         }
@@ -1228,6 +1448,16 @@
         }
       } else {
         html += `<p class="center" style="margin:0.75rem 0;">Tie or no majority votes. No one was lynched today.</p>`;
+      }
+
+      // Tough guy delayed demise at the end of the day
+      if (state.toughGuyAttacked) {
+        const tg = state.players.find(p => p.id === state.toughGuyAttacked);
+        if (tg && tg.alive) {
+          processCasualties(new Set([tg.id]));
+          html += `<p class="center" style="color:var(--wolf);">🩸 Tough Guy (${tg.name}) succumbed to last night's wounds at sunset.</p>`;
+        }
+        state.toughGuyAttacked = false;
       }
 
       html += `<button id="nightFallsBtn" class="danger big" style="margin-top:1rem; padding:0.9rem;">Night Falls (Begin Night ${state.round + 1})</button>`;
@@ -1246,8 +1476,19 @@
       const village = alive.filter(p => ROLES[p.role].team === 'village').length;
       const solos = alive.filter(p => ROLES[p.role].team === 'solo').length;
 
+      // Lovers win condition
+      if (state.lovers && alive.length === 2 && alive.every(p => state.lovers.includes(p.id))) {
+        return endGame('❤️ The Lovers survived to the end and win together!');
+      }
+
+      // Sect Leader win condition
       if (state.sect.length && alive.every(p => state.sect.includes(p.id) || p.role === 'sect_leader')) {
         return endGame('The Sect Leader and their Sect have converted everyone and win!');
+      }
+
+      // Solo Killers / Neutral check
+      if (alive.length === 1 && solos === 1) {
+        return endGame(`${alive[0].name} (${ROLES[alive[0].role].name}) is the last survivor and wins!`);
       }
 
       if (wolves === 0 && solos === 0) return endGame('Villagers Win! All threats eliminated.');
