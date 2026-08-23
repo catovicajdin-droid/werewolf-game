@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Werewolf: Join</title>
+  <link rel="stylesheet" href="shared/theme.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Werewolf</h1>
+
+    <div id="screen-join" class="screen active">
+      <div class="card">
+        <h3>Join Game</h3>
+        <label class="muted">Room Code</label>
+        <input type="text" id="roomCodeInput" placeholder="e.g. AB12C" autocomplete="off" style="text-transform:uppercase;">
+        <label class="muted">Your Name</label>
+        <input type="text" id="nameInput" placeholder="Enter your name" autocomplete="off">
+        <button id="joinBtn">Join Room</button>
+        <p class="muted center" id="joinError" style="color:var(--neon-wolf); min-height:1.2em;"></p>
+      </div>
+    </div>
+
+    <div id="screen-waiting" class="screen">
+      <div class="card center">
+        <p class="muted">You're in! Waiting for the host to start the game.</p>
+        <div class="giant" id="waitingName" style="color:var(--neon-safe); text-shadow:0 0 20px var(--neon-safe-glow); margin:0.75rem 0;"></div>
+      </div>
+      <div class="card">
+        <h3>Players (<span id="playerCount">0</span>)</h3>
+        <ul id="rosterList" class="player-list"></ul>
+      </div>
+    </div>
+
+    <div id="screen-reveal" class="screen">
+      <div class="card center privacy-box">
+        <p class="muted" style="margin-bottom:1rem;">Make sure no one else can see your screen.</p>
+        <button id="revealBtn" class="purple big" style="padding:1rem;">Tap to Reveal Your Role</button>
+      </div>
+      <div id="roleCardWrap" style="display:none;">
+        <div class="card">
+          <div class="role-banner">
+            <span id="roleBadge" class="role-badge"></span>
+            <h2 id="roleName" style="margin-top:0.5rem;"></h2>
+            <p id="roleDesc" class="muted" style="margin-top:0.5rem; line-height:1.4;"></p>
+            <div id="roleExtra" style="margin-top:0.75rem; font-size:0.9rem; color:var(--neon-solo);"></div>
+          </div>
+          <p class="muted center" style="font-size:0.8rem;">Networked night/day actions aren't wired up yet — for this round, follow along on the host's single-device screen. Keep this tab open; your role stays here if you need to check it again.</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="screen-error" class="screen">
+      <div class="card center">
+        <h3>Disconnected</h3>
+        <p class="muted" id="errorText">Something went wrong.</p>
+        <button id="backToJoinBtn" class="secondary">Back to Join Screen</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="shared/roles.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const switchScreen = name => {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      $(name).classList.add('active');
+    };
+
+    const params = new URLSearchParams(location.search);
+    const prefillRoom = (params.get('room') || '').toUpperCase();
+    if (prefillRoom) $('roomCodeInput').value = prefillRoom;
+
+    function seatKey(roomCode) { return `werewolf_seat_${roomCode}`; }
+    function loadSeat(roomCode) {
+      try { return JSON.parse(localStorage.getItem(seatKey(roomCode))); } catch { return null; }
+    }
+    function saveSeat(roomCode, seat) {
+      try { localStorage.setItem(seatKey(roomCode), JSON.stringify(seat)); } catch { /* private mode etc. */ }
+    }
+    function clearSeat(roomCode) {
+      try { localStorage.removeItem(seatKey(roomCode)); } catch { /* ignore */ }
+    }
+
+    let ws = null;
+    let myName = '';
+    let myRoomCode = '';
+    let pendingRejoinSeat = null;
+
+    function connect() {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+      ws.addEventListener('open', () => {
+        if (pendingRejoinSeat) {
+          ws.send(JSON.stringify({
+            type: 'player:rejoin',
+            roomCode: pendingRejoinSeat.roomCode,
+            playerId: pendingRejoinSeat.playerId,
+            token: pendingRejoinSeat.token
+          }));
+        }
+      });
+
+      ws.addEventListener('message', (ev) => {
+        const msg = JSON.parse(ev.data);
+
+        if (msg.type === 'player:joined') {
+          myRoomCode = msg.roomCode;
+          saveSeat(myRoomCode, { roomCode: msg.roomCode, playerId: msg.playerId, token: msg.token });
+          $('waitingName').textContent = myName;
+          switchScreen('screen-waiting');
+        } else if (msg.type === 'room:roster') {
+          $('playerCount').textContent = msg.players.length;
+          $('rosterList').innerHTML = msg.players.map(p => `
+            <li><span><span class="status-dot ${p.connected ? '' : 'offline'}"></span>${p.name}</span></li>
+          `).join('');
+        } else if (msg.type === 'role:assign') {
+          renderRole(msg);
+          switchScreen('screen-reveal');
+        } else if (msg.type === 'room:kicked') {
+          clearSeat(myRoomCode);
+          showError('You were removed from the room by the host.');
+        } else if (msg.type === 'room:error') {
+          if ($('screen-join').classList.contains('active')) {
+            $('joinError').textContent = msg.message;
+          } else {
+            showError(msg.message);
+          }
+        }
+      });
+
+      ws.addEventListener('close', () => {
+        if (myRoomCode && !$('screen-error').classList.contains('active')) {
+          // Try a silent reconnect (phone likely just backgrounded/lost signal).
+          const seat = loadSeat(myRoomCode);
+          if (seat) {
+            pendingRejoinSeat = seat;
+            setTimeout(connect, 1500);
+          }
+        }
+      });
+    }
+
+    function showError(text) {
+      $('errorText').textContent = text;
+      switchScreen('screen-error');
+    }
+
+    function renderRole(msg) {
+      $('revealBtn').style.display = '';
+      $('roleCardWrap').style.display = 'none';
+      $('roleBadge').className = `role-badge badge-${msg.team}`;
+      $('roleBadge').textContent = `${msg.team.toUpperCase()} TEAM`;
+      $('roleName').textContent = msg.name;
+      $('roleDesc').textContent = msg.desc;
+
+      let extraHtml = '';
+      if (msg.extra) {
+        if (msg.extra.kind === 'wolfpack') {
+          extraHtml = msg.extra.names.length
+            ? `🐺 Fellow Werewolves: <strong>${msg.extra.names.join(', ')}</strong>`
+            : `🐺 You are the only Werewolf.`;
+        } else if (msg.extra.kind === 'siblings') {
+          extraHtml = `👥 Siblings: <strong>${msg.extra.names.length ? msg.extra.names.join(', ') : 'None'}</strong>`;
+        } else if (msg.extra.kind === 'headhunter_target') {
+          extraHtml = `🎯 Your secret bounty target: <strong>${msg.extra.name || 'Unknown'}</strong>`;
+        }
+      }
+      $('roleExtra').innerHTML = extraHtml;
+
+      $('revealBtn').onclick = () => {
+        $('revealBtn').parentElement.style.display = 'none';
+        $('roleCardWrap').style.display = '';
+      };
+    }
+
+    $('joinBtn').addEventListener('click', () => {
+      const roomCode = $('roomCodeInput').value.trim().toUpperCase();
+      const name = $('nameInput').value.trim();
+      $('joinError').textContent = '';
+
+      if (!roomCode) return $('joinError').textContent = 'Enter a room code.';
+      if (!name) return $('joinError').textContent = 'Enter your name.';
+
+      myName = name;
+      pendingRejoinSeat = null;
+
+      const doJoin = () => ws.send(JSON.stringify({ type: 'player:join', roomCode, name }));
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        doJoin();
+      } else {
+        connect();
+        ws.addEventListener('open', doJoin, { once: true });
+      }
+    });
+
+    $('backToJoinBtn').addEventListener('click', () => {
+      myRoomCode = '';
+      pendingRejoinSeat = null;
+      switchScreen('screen-join');
+    });
+
+    // If we arrived via a QR link for a room we've already got a seat in
+    // (e.g. the page was reloaded), reconnect automatically instead of
+    // asking the player to type their name again.
+    if (prefillRoom) {
+      const seat = loadSeat(prefillRoom);
+      if (seat) {
+        pendingRejoinSeat = seat;
+        myRoomCode = prefillRoom;
+        connect();
+      }
+    }
+  </script>
+</body>
+</html>

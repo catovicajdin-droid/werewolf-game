@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Werewolf: Host</title>
+  <link rel="stylesheet" href="shared/theme.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Werewolf: Host</h1>
+
+    <div id="screen-connecting" class="screen active">
+      <div class="card center">
+        <p class="muted">Starting a room...</p>
+      </div>
+    </div>
+
+    <div id="screen-lobby" class="screen">
+      <div class="card center">
+        <p class="muted" style="margin-bottom:0.5rem;">Players scan this code or enter it manually to join:</p>
+        <div class="room-code" id="roomCode">-----</div>
+        <div class="qr-wrap"><img id="qrImg" alt="Join QR code"></div>
+        <p class="muted" id="joinUrlText" style="word-break:break-all;"></p>
+      </div>
+
+      <div class="card">
+        <h3>Players (<span id="playerCount">0</span>)</h3>
+        <ul id="rosterList" class="player-list"></ul>
+        <p class="muted center" id="rosterEmpty">Waiting for players to join...</p>
+      </div>
+
+      <div class="card">
+        <h3>Role Allocation Mode</h3>
+        <select id="assignmentMode">
+          <option value="selected_random">Mode 2: Random from Enabled Roles (Toggles)</option>
+          <option value="full_random">Mode 1: Full Random (All Roles Pool)</option>
+          <option value="custom">Manual / Fixed Counts</option>
+        </select>
+        <p id="modeDesc" class="muted"></p>
+      </div>
+
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+          <h3 style="margin:0;">Roles Setup</h3>
+          <div style="display:flex; gap:0.35rem;">
+            <button class="secondary" style="width:auto; padding:0.25rem 0.6rem; font-size:0.75rem; margin:0;" onclick="toggleAllRoles(true)">Enable All</button>
+            <button class="secondary" style="width:auto; padding:0.25rem 0.6rem; font-size:0.75rem; margin:0;" onclick="toggleAllRoles(false)">Disable All</button>
+          </div>
+        </div>
+        <div id="roleGrid" class="role-grid"></div>
+      </div>
+
+      <button id="startBtn" class="success" disabled>Start Game</button>
+      <p class="muted center" id="startHint" style="margin-top:0.5rem;"></p>
+      <p class="muted center" style="margin-top:0.75rem; font-size:0.8rem;">Want to play too? Join from a second device/tab with the same code, just like everyone else.</p>
+    </div>
+
+    <div id="screen-started" class="screen">
+      <div class="card center">
+        <h2>🌙 Roles have been sent!</h2>
+        <p class="muted">Each player can now view their role privately on their own phone.</p>
+        <div class="card" style="background:rgba(251,191,36,0.08); border-color:var(--neon-solo); text-align:left; margin-top:1rem;">
+          <strong style="color:var(--neon-solo);">Heads up:</strong>
+          <p class="muted" style="margin-top:0.4rem;">Networked night/day play isn't wired up yet (that's next). For this round, run the night and day phases on the single-device pass-and-play screen — everyone has already privately seen their own role here.</p>
+        </div>
+        <ul id="startedRoster" class="player-list" style="margin-top:1rem; text-align:left;"></ul>
+      </div>
+    </div>
+  </div>
+
+  <script src="shared/roles.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const switchScreen = name => {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      $(name).classList.add('active');
+    };
+
+    let currentMode = 'selected_random';
+    const roleToggles = {};
+    const customRoleCounts = {};
+    Object.keys(ROLES).forEach(k => {
+      roleToggles[k] = ['werewolf', 'villager', 'seer', 'doctor', 'witch', 'avenger', 'bodyguard', 'fool'].includes(k);
+      customRoleCounts[k] = k === 'werewolf' ? 2 : (k === 'seer' || k === 'doctor' ? 1 : 0);
+    });
+
+    let players = [];
+
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+    ws.addEventListener('open', () => {
+      ws.send(JSON.stringify({ type: 'host:create' }));
+    });
+
+    ws.addEventListener('message', (ev) => {
+      const msg = JSON.parse(ev.data);
+
+      if (msg.type === 'room:created') {
+        $('roomCode').textContent = msg.code;
+        $('qrImg').src = msg.qrDataUrl;
+        $('joinUrlText').textContent = msg.joinUrl;
+        switchScreen('screen-lobby');
+      } else if (msg.type === 'room:roster') {
+        players = msg.players;
+        renderRoster();
+      } else if (msg.type === 'room:error') {
+        alert(msg.message);
+      } else if (msg.type === 'host:started') {
+        $('startedRoster').innerHTML = players.map(p => `<li><span>${p.name}</span></li>`).join('');
+        switchScreen('screen-started');
+      }
+    });
+
+    ws.addEventListener('close', () => {
+      $('startHint').textContent = 'Connection to the server was lost. Reload this page to create a new room.';
+    });
+
+    function renderRoster() {
+      $('playerCount').textContent = players.length;
+      $('rosterEmpty').style.display = players.length ? 'none' : 'block';
+      $('rosterList').innerHTML = players.map(p => `
+        <li>
+          <span><span class="status-dot ${p.connected ? '' : 'offline'}"></span>${p.name}</span>
+          <button class="secondary" style="width:auto; padding:0.2rem 0.5rem;" onclick="kickPlayer('${p.id}')">Remove</button>
+        </li>
+      `).join('');
+      const enough = players.length >= 4;
+      $('startBtn').disabled = !enough;
+      $('startHint').textContent = enough ? '' : `Need at least 4 players to start (${players.length}/4).`;
+    }
+
+    window.kickPlayer = function (id) {
+      ws.send(JSON.stringify({ type: 'host:kick', playerId: id }));
+    };
+
+    $('assignmentMode').addEventListener('change', e => {
+      currentMode = e.target.value;
+      updateModeUI();
+    });
+
+    function updateModeUI() {
+      $('assignmentMode').value = currentMode;
+      if (currentMode === 'selected_random') {
+        $('modeDesc').textContent = 'Toggle which roles are allowed. The game randomly determines if they appear and how many appear.';
+      } else if (currentMode === 'full_random') {
+        $('modeDesc').textContent = 'All roles are in the pool. Quantities and presence are completely randomized.';
+      } else {
+        $('modeDesc').textContent = 'Set specific counts manually for each role.';
+      }
+      renderRoleCards();
+    }
+
+    function renderRoleCards() {
+      const grid = $('roleGrid');
+      grid.innerHTML = Object.entries(ROLES).map(([key, r]) => {
+        let controls = '';
+        if (currentMode === 'custom') {
+          controls = `<input type="number" id="role_count_${key}" value="${customRoleCounts[key] || 0}" min="0" max="10" onchange="updateCustomCount('${key}', this.value)" style="padding:0.3rem; margin:0; width:60px;">`;
+        } else if (currentMode === 'selected_random') {
+          const active = roleToggles[key];
+          controls = `<button class="role-toggle-btn ${active ? 'active' : ''}" id="toggle_btn_${key}" onclick="toggleRole('${key}')">${active ? 'ENABLED' : 'OFF'}</button>`;
+        } else {
+          controls = `<span class="muted" style="font-size:0.75rem;">In Random Pool</span>`;
+        }
+        return `
+          <div class="role-card team-${r.team}">
+            <div>
+              <strong>${r.name}</strong>
+              <span class="role-badge badge-${r.team}">${r.team}</span>
+            </div>
+            <div class="role-action-bar">${controls}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    window.updateCustomCount = function (key, val) {
+      customRoleCounts[key] = parseInt(val) || 0;
+    };
+
+    window.toggleRole = function (key) {
+      roleToggles[key] = !roleToggles[key];
+      const btn = $(`toggle_btn_${key}`);
+      if (btn) {
+        btn.className = `role-toggle-btn ${roleToggles[key] ? 'active' : ''}`;
+        btn.textContent = roleToggles[key] ? 'ENABLED' : 'OFF';
+      }
+    };
+
+    window.toggleAllRoles = function (enable) {
+      Object.keys(ROLES).forEach(k => roleToggles[k] = enable);
+      renderRoleCards();
+    };
+
+    $('startBtn').addEventListener('click', () => {
+      ws.send(JSON.stringify({
+        type: 'host:start',
+        assignmentMode: currentMode,
+        roleToggles,
+        customRoleCounts
+      }));
+    });
+
+    updateModeUI();
+  </script>
+</body>
+</html>
