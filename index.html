@@ -652,6 +652,8 @@
       asleepId: null,
       silencedId: null,
       pacifistRevealTarget: null,
+      mayorRevealed: false,
+      votingDisabledThisRound: false,
       timerId: null,
       passiveTimerId: null,
       log: [],
@@ -788,7 +790,8 @@
             deathReason: null,
             usedOneTime: false,
             bullets: 2,
-            arrows: 2
+            arrows: 2,
+            sleepCharges: 2
           });
           addedCount++;
         }
@@ -964,6 +967,7 @@
         p.usedOneTime = false;
         p.bullets = 2;
         p.arrows = 2;
+        p.sleepCharges = 2;
       });
 
       state.headhunterTargets = {};
@@ -990,6 +994,8 @@
       state.silencedId = null;
       state.asleepId = null;
       state.pacifistRevealTarget = null;
+      state.mayorRevealed = false;
+      state.votingDisabledThisRound = false;
 
       beginNightPhase();
     }
@@ -1000,6 +1006,8 @@
       state.nightWolfVotes = {};
       state.wolfVoteHistory = [];
       state.pacifistRevealTarget = null;
+      state.asleepId = null;
+      state.votingDisabledThisRound = false;
       state.nightActions = {
         protectId: null,
         bodyguardId: null,
@@ -1013,7 +1021,6 @@
         asleepTarget: null,
         silencedTarget: null,
         redLadyStay: null,
-        beastTrapTarget: null,
         kittenBiteId: null,
         reviveId: null
       };
@@ -1126,8 +1133,8 @@
           if (player.role === 'kitten_wolf' && !player.usedOneTime) {
             actHtml += `<label style="margin-top:0.6rem;"><strong>Kitten Wolf: Bite & Convert to Werewolf instead:</strong></label>`;
             actHtml += `<select id="kittenBiteSelect"><option value="">Do not bite tonight</option>${nonWolves.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
-          } else if (player.role === 'nightmare_werewolf' && !player.usedOneTime) {
-            actHtml += `<label style="margin-top:0.6rem;"><strong>Nightmare Werewolf: Put a player to sleep for tonight:</strong></label>`;
+          } else if (player.role === 'nightmare_werewolf' && player.sleepCharges > 0) {
+            actHtml += `<label style="margin-top:0.6rem;"><strong>Nightmare Werewolf: Put a player to sleep for tonight (${player.sleepCharges} use${player.sleepCharges !== 1 ? 's' : ''} left):</strong></label>`;
             actHtml += `<select id="nightmareTarget"><option value="">None (skip)</option>${otherLiving.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>`;
           } else if (player.role === 'wolf_seer') {
             actHtml += `<label style="margin-top:0.6rem;"><strong>Wolf Seer: Uncover Exact Role:</strong></label>`;
@@ -1361,7 +1368,9 @@
           const t1 = state.players.find(p => p.id === parseFloat(s1.value));
           const t2 = state.players.find(p => p.id === parseFloat(s2.value));
           if (!t1 || !t2) return;
-          const same = ROLES[t1.role].team === ROLES[t2.role].team;
+          const team1 = ROLES[t1.role].team;
+          const team2 = ROLES[t2.role].team;
+          const same = team1 === team2 && (team1 !== 'solo' || t1.role === t2.role);
           $('detResult').innerHTML = `
             <div class="inspection-result-box">
               ${t1.name} & ${t2.name} are ${same ? '<span class="role-badge badge-village">ON THE SAME TEAM</span>' : '<span class="role-badge badge-wolf">ON DIFFERENT TEAMS</span>'}
@@ -1461,8 +1470,10 @@
       if (state.asleepId === player.id) return false;
       const r = player.role;
       if (isWolf(r) && !(state.round === 1 && state.settings.firstNightImmunity)) return true;
-      if (['doctor', 'bodyguard', 'serial_killer', 'arsonist', 'sect_leader', 'sect_hunter', 'grumpy_grandma', 'beast_hunter'].includes(r)) return true;
+      if (['doctor', 'bodyguard', 'serial_killer', 'arsonist', 'sect_leader', 'sect_hunter', 'grumpy_grandma', 'beast_hunter', 'avenger', 'red_lady'].includes(r)) return true;
       if (r === 'pacifist' && !player.usedOneTime) return true;
+      if (r === 'naughty_boy' && !player.usedOneTime) return true;
+      if (r === 'marksman' && player.arrows > 0) return true;
       if (r === 'witch' && (!state.witchHealUsed || !state.witchPoisonUsed)) return true;
       if (r === 'priest' && !player.usedOneTime) return true;
       if (r === 'medium' && !player.usedOneTime && state.players.some(p => !p.alive)) return true;
@@ -1507,6 +1518,13 @@
       if ($('arsonistMode') && ($('arsonistMode').value === 'ignite' || $('douse1')?.value || $('douse2')?.value)) return true;
       if ($('cupidLover1') && $('cupidLover1').value && $('cupidLover2')?.value) return true;
       if ($('graveRobberSelect') && $('graveRobberSelect').value) return true;
+      if ($('avengerSelect') && $('avengerSelect').value) return true;
+      if ($('redLadySelect') && $('redLadySelect').value) return true;
+      if ($('swap1') && $('swap2') && $('swap1').value && $('swap2').value && $('swap1').value !== $('swap2').value) return true;
+      if ($('marksmanSelect') && $('marksmanSelect').value) return true;
+      if ($('nightmareTarget') && $('nightmareTarget').value) return true;
+      if ($('kittenBiteSelect') && $('kittenBiteSelect').value) return true;
+      if ($('juniorSelect') && $('juniorSelect').value) return true;
       return false;
     }
 
@@ -1532,7 +1550,8 @@
         }
         if ($('nightmareTarget') && $('nightmareTarget').value) {
           state.nightActions.asleepTarget = parseFloat($('nightmareTarget').value);
-          player.usedOneTime = true;
+          state.asleepId = state.nightActions.asleepTarget;
+          player.sleepCharges--;
         }
         if ($('juniorSelect') && $('juniorSelect').value) {
           state.juniorTargets[player.id] = parseFloat($('juniorSelect').value);
@@ -1660,7 +1679,11 @@
           if (victim.role === 'cursed_human') {
             victim.role = 'werewolf';
           } else if (victim.id === activeTrap) {
-            // Thwarted
+            const livingWolves = state.players.filter(p => p.alive && isWolf(p.role) && p.id !== victim.id);
+            if (livingWolves.length) {
+              const weakest = livingWolves.find(w => w.role === 'werewolf') || livingWolves[Math.floor(Math.random() * livingWolves.length)];
+              deaths.push({ id: weakest.id, reason: "Killed by Beast Hunter's trap (weakest wolf)" });
+            }
           } else if (victim.role === 'tough_guy') {
             state.toughGuyAttacked = victim.id;
           } else if (state.nightActions.witchHealUsedTurn) {
@@ -1773,9 +1796,9 @@
         }
 
         Object.entries(state.headhunterTargets).forEach(([hhId, tgtId]) => {
-          if (tgtId === p.id && state.phase === 'night') {
+          if (tgtId === p.id) {
             const hh = state.players.find(x => x.id === parseFloat(hhId));
-            if (hh) hh.role = 'villager';
+            if (hh && hh.alive) hh.role = 'villager';
           }
         });
 
@@ -1833,8 +1856,12 @@
         if (s) html += `<p class="center" style="color:var(--neon-solo);">🤐 <strong>${s.name}</strong> has been silenced by Grumpy Grandma!</p>`;
       }
 
+      const votingCancelled = !!state.pacifistRevealTarget || state.votingDisabledThisRound;
+
       if (state.pacifistRevealTarget) {
         html += `<p class="center" style="color:var(--neon-safe); margin:0.5rem 0;">🕊️ Voting is cancelled today due to the Pacifist's ability.</p>`;
+      } else if (state.votingDisabledThisRound) {
+        html += `<p class="center" style="color:var(--neon-safe); margin:0.5rem 0;">🔍 Voting is cancelled today due to the Vigilante's inspection.</p>`;
       }
 
       html += renderDayActionTriggers();
@@ -1843,7 +1870,7 @@
         html += `<div class="big center" id="timerDisplay" style="color:var(--neon-solo); margin:1.25rem 0; font-size: 2rem; font-weight: 800; text-shadow:0 0 15px var(--neon-solo-glow);">${Math.floor(currentSecs / 60)}:${(currentSecs % 60).toString().padStart(2, '0')}</div>`;
       }
 
-      if (state.pacifistRevealTarget) {
+      if (votingCancelled) {
         html += `<button id="pacifistSkipBtn" class="danger big" style="padding:0.9rem;">End Day & Fall into Night</button>`;
       } else {
         html += `<button id="openPassVoteBtn" class="purple big" style="padding:0.9rem;">Begin Sequential Voting</button>`;
@@ -1907,9 +1934,22 @@
       vigs.forEach(v => {
         html += `
           <div class="card" style="padding:0.75rem; border-color:var(--neon-village); margin-bottom:0.6rem;">
-            <p style="font-size:0.85rem;">🛡️ <strong>Vigilante (${v.name}):</strong> Use 1 bullet to eliminate.</p>
+            <p style="font-size:0.85rem;">🛡️ <strong>Vigilante (${v.name}):</strong> Use your 1 bullet to eliminate, or inspect a role instead (cancels voting today). Choose one.</p>
             <select id="vigTgt_${v.id}"><option value="">Select target...</option>${living.filter(p => p.id !== v.id).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select>
-            <button class="danger" style="margin-top:0.4rem; padding:0.5rem;" onclick="triggerVigilanteAction(${v.id})">Take Vigilante Shot</button>
+            <div class="grid-2">
+              <button class="danger" style="margin-top:0.4rem; padding:0.5rem;" onclick="triggerVigilanteAction(${v.id})">Take Vigilante Shot</button>
+              <button class="secondary" style="margin-top:0.4rem; padding:0.5rem;" onclick="triggerVigilanteInspect(${v.id})">Inspect Instead</button>
+            </div>
+          </div>
+        `;
+      });
+
+      const mayors = living.filter(p => p.role === 'mayor' && !state.mayorRevealed);
+      mayors.forEach(m => {
+        html += `
+          <div class="card" style="padding:0.75rem; border-color:var(--neon-solo); margin-bottom:0.6rem;">
+            <p style="font-size:0.85rem;">🎖️ <strong>${m.name}</strong> may reveal as Mayor. Once revealed, your vote counts as 2 for the rest of the game.</p>
+            <button class="warning" style="margin-top:0.4rem; padding:0.5rem;" onclick="triggerMayorReveal(${m.id})">Reveal as Mayor</button>
           </div>
         `;
       });
@@ -1966,6 +2006,28 @@
       alert(`💥 Vigilante ${v.name} eliminated ${tgt.name}!`);
       processCasualties([{ id: tgt.id, reason: `Eliminated by Vigilante (${v.name})` }]);
       if (!checkWin()) runDayPhase();
+    };
+
+    window.triggerVigilanteInspect = function(vId) {
+      const v = state.players.find(p => p.id === vId);
+      const sel = $(`vigTgt_${vId}`);
+      if (!v || !sel || !sel.value) return alert('Select a target to inspect.');
+      const tgtId = parseFloat(sel.value);
+      const tgt = state.players.find(p => p.id === tgtId);
+      if (!tgt) return;
+
+      v.usedOneTime = true;
+      state.votingDisabledThisRound = true;
+      alert(`🔍 Vigilante ${v.name} secretly inspected ${tgt.name}: they are ${ROLES[tgt.role].name}. Voting is cancelled for the rest of today.`);
+      runDayPhase();
+    };
+
+    window.triggerMayorReveal = function(id) {
+      const m = state.players.find(p => p.id === id);
+      if (!m) return;
+      state.mayorRevealed = true;
+      alert(`🎖️ ${m.name} has revealed themselves as the Mayor! Their vote now counts as 2 for the rest of the game.`);
+      runDayPhase();
     };
 
     function showDayVoteHub() {
