@@ -183,7 +183,10 @@ function freshGameState(settings) {
     marksmanTargets: {},
     submitted: {},
     dayVoteHistory: [],
-    doctorUsedTargets: []
+    doctorUsedTargets: [],
+    bodyguardUsedTargets: [],
+    grandmaUsedTargets: [],
+    redLadyUsedTargets: []
   };
 }
 
@@ -357,7 +360,13 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
       passive = true;
     }
   } else if (player.role === 'bodyguard') {
-    fields.push({ type: 'select', id: 'bodyguardProtectSelect', label: 'Select a Player to Bodyguard (You die in their place if attacked)', placeholder: 'Select player...', options: otherLiving.map(opt) });
+    const eligible = otherLiving.filter(p => !game.bodyguardUsedTargets.includes(p.id));
+    if (eligible.length > 0) {
+      fields.push({ type: 'select', id: 'bodyguardProtectSelect', label: 'Select a Player to Bodyguard (each player can only be guarded once per game; you die in their place if attacked)', placeholder: 'Select player...', options: eligible.map(opt) });
+    } else {
+      message = 'You have already guarded every living player once - no new targets remain.';
+      passive = true;
+    }
   } else if (player.role === 'witch') {
     fields.push({ type: 'info', text: `Potions - Heal: ${game.witchHealUsed ? 'Used' : 'Available'} | Poison: ${game.witchPoisonUsed ? 'Used' : 'Available'}` });
     if (!game.witchHealUsed) {
@@ -397,9 +406,21 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
   } else if (player.role === 'cupid' && game.round === 1 && !game.lovers) {
     fields.push({ type: 'select-pair', ids: ['cupidLover1', 'cupidLover2'], label: 'Bind Two Lovers for the Match', placeholders: ['Lover 1...', 'Lover 2...'], options: otherLiving.map(opt) });
   } else if (player.role === 'grumpy_grandma') {
-    fields.push({ type: 'select', id: 'grandmaSilenceSelect', label: 'Silence a Player for Tomorrow', placeholder: 'Select player...', options: otherLiving.map(opt) });
+    const eligible = otherLiving.filter(p => !game.grandmaUsedTargets.includes(p.id));
+    if (eligible.length > 0) {
+      fields.push({ type: 'select', id: 'grandmaSilenceSelect', label: 'Silence a Player for Tomorrow (each player can only be silenced once per game)', placeholder: 'Select player...', options: eligible.map(opt) });
+    } else {
+      message = 'You have already silenced every living player once - no new targets remain.';
+      passive = true;
+    }
   } else if (player.role === 'red_lady') {
-    fields.push({ type: 'select', id: 'redLadySelect', label: "Visit a Player's House Tonight", placeholder: 'Stay at home', options: otherLiving.map(opt) });
+    const eligible = otherLiving.filter(p => !game.redLadyUsedTargets.includes(p.id));
+    if (eligible.length > 0) {
+      fields.push({ type: 'select', id: 'redLadySelect', label: "Visit a Player's House Tonight (each player can only be visited once per game)", placeholder: 'Stay at home', options: eligible.map(opt) });
+    } else {
+      message = 'You have already visited every living player once - staying home tonight.';
+      passive = true;
+    }
   } else if (player.role === 'naughty_boy' && !player.usedOneTime) {
     fields.push({ type: 'select-pair', ids: ['swap1', 'swap2'], label: 'Swap Roles of Two Players (Once per game)', placeholders: ['Player 1...', 'Player 2...'], options: otherLiving.map(opt) });
   } else if (player.role === 'beast_hunter') {
@@ -507,6 +528,9 @@ function applyNightSubmission(game, players, player, submission) {
   }
   if (v('bodyguardProtectSelect')) {
     game.nightActions.bodyguardId = { guardId: player.id, targetId: v('bodyguardProtectSelect') };
+    if (!game.bodyguardUsedTargets.includes(game.nightActions.bodyguardId.targetId)) {
+      game.bodyguardUsedTargets.push(game.nightActions.bodyguardId.targetId);
+    }
   }
   if (submission.witchHealVillageCheck) {
     game.nightActions.witchHealUsedTurn = true;
@@ -553,9 +577,15 @@ function applyNightSubmission(game, players, player, submission) {
   }
   if (v('grandmaSilenceSelect')) {
     game.nightActions.silencedTarget = v('grandmaSilenceSelect');
+    if (!game.grandmaUsedTargets.includes(game.nightActions.silencedTarget)) {
+      game.grandmaUsedTargets.push(game.nightActions.silencedTarget);
+    }
   }
   if (v('redLadySelect')) {
     game.nightActions.redLadyStay = { ladyId: player.id, targetId: v('redLadySelect') };
+    if (!game.redLadyUsedTargets.includes(game.nightActions.redLadyStay.targetId)) {
+      game.redLadyUsedTargets.push(game.nightActions.redLadyStay.targetId);
+    }
   }
   if (v('swap1') && v('swap2') && v('swap1') !== v('swap2')) {
     const p1 = players.find(p => p.id === v('swap1'));
