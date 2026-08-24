@@ -41,6 +41,48 @@ body {
   transition: background 0.5s ease;
 }
 
+/* Ambient scene, drawn entirely in CSS/inline SVG so it costs a few KB and
+   zero extra network requests: a starfield + moon glow fixed near the top
+   (::before), and a low fog + pine-forest skyline fixed at the bottom
+   (::after). Both sit behind all page content via a negative z-index. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-image:
+    radial-gradient(1.6px 1.6px at 12% 18%, rgba(255,255,255,0.55) 50%, transparent 51%),
+    radial-gradient(1.2px 1.2px at 28% 9%, rgba(255,255,255,0.35) 50%, transparent 51%),
+    radial-gradient(1.8px 1.8px at 45% 24%, rgba(255,255,255,0.4) 50%, transparent 51%),
+    radial-gradient(1.2px 1.2px at 60% 6%, rgba(255,255,255,0.3) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 75% 20%, rgba(255,255,255,0.4) 50%, transparent 51%),
+    radial-gradient(1.2px 1.2px at 90% 13%, rgba(255,255,255,0.3) 50%, transparent 51%),
+    radial-gradient(1.6px 1.6px at 96% 27%, rgba(255,255,255,0.35) 50%, transparent 51%),
+    radial-gradient(circle at 84% 9%, rgba(226,232,255,0.85) 0%, rgba(196,208,255,0.4) 5%, rgba(148,163,255,0.14) 13%, transparent 42%);
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 32vh;
+  min-height: 200px;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.85;
+  background-repeat: no-repeat, no-repeat, repeat-x;
+  background-position: 0 0, 0 0, left bottom;
+  background-size: auto, auto, 220px 140px;
+  background-image:
+    radial-gradient(ellipse 55% 45% at 18% 100%, rgba(148,163,184,0.12) 0%, transparent 70%),
+    radial-gradient(ellipse 45% 40% at 78% 100%, rgba(148,163,184,0.1) 0%, transparent 70%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='140' viewBox='0 0 220 140'%3E%3Cg fill='%230a0e1c'%3E%3Cpolygon points='20,60 1,130 39,130'/%3E%3Crect x='17' y='128' width='6' height='12'/%3E%3Cpolygon points='65,35 39,130 91,130'/%3E%3Crect x='62' y='128' width='6' height='12'/%3E%3Cpolygon points='110,55 90,130 130,130'/%3E%3Crect x='107' y='128' width='6' height='12'/%3E%3Cpolygon points='155,25 126,130 184,130'/%3E%3Crect x='151' y='128' width='8' height='12'/%3E%3Cpolygon points='200,65 182,130 218,130'/%3E%3Crect x='197' y='128' width='6' height='12'/%3E%3C/g%3E%3C/svg%3E");
+}
+
 body.theme-night {
   background-image: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #09091f 50%, #02020a 100%);
 }
@@ -272,6 +314,15 @@ button:disabled {
   box-shadow: 0 0 12px var(--neon-solo-glow);
 }
 
+/* Icon-prefix every team badge, wherever one appears (role reveal, night
+   prompts, inspect results, final roles list) - a CSS ::before survives any
+   number of JS `badge.textContent = ...` reassignments, since the pseudo-
+   element is driven by the class, not the element's own text content. */
+.role-badge::before { margin-right: 0.35em; }
+.badge-wolf::before { content: '🐺'; }
+.badge-village::before { content: '🛡️'; }
+.badge-solo::before { content: '🎭'; }
+
 .player-list { list-style: none; }
 .player-list li {
   display: flex;
@@ -411,6 +462,16 @@ button:disabled {
   justify-content: center;
   margin: 1rem 0;
 }
+
+/* Icons for headings whose text is entirely JS-driven (round/report number),
+   so a static HTML prefix would just get overwritten - same ::before trick
+   as the role badges above. */
+#nightProgressHeading::before,
+#hostMorningHeading::before {
+  content: '';
+}
+#nightProgressHeading:not(:empty)::before { content: '🌙 '; }
+#hostMorningHeading:not(:empty)::before { content: '🌅 '; }
 .qr-wrap img {
   border-radius: 12px;
   background: #fff;

@@ -8,10 +8,10 @@
 </head>
 <body>
   <div class="container">
-    <h1>Werewolf: Host</h1>
+    <h1>🐺 Werewolf: Host</h1>
 
     <div class="center" style="margin:-0.75rem 0 1rem;">
-      <button id="exitSessionBtn" class="secondary" style="width:auto; padding:0.3rem 0.8rem; font-size:0.75rem; margin:0;">Exit Session</button>
+      <button id="exitSessionBtn" class="secondary" style="width:auto; padding:0.3rem 0.8rem; font-size:0.75rem; margin:0;">🚪 Exit Session</button>
     </div>
 
     <div id="screen-connecting" class="screen active">
@@ -26,7 +26,7 @@
         <div class="room-code" id="roomCode">-----</div>
         <div class="qr-wrap"><img id="qrImg" alt="Join QR code"></div>
         <p class="muted" id="joinUrlText" style="word-break:break-all;"></p>
-        <button id="copyLinkBtn" class="secondary" style="width:auto; padding:0.4rem 0.9rem; font-size:0.8rem; margin-top:0.6rem;">Copy Link</button>
+        <button id="copyLinkBtn" class="secondary" style="width:auto; padding:0.4rem 0.9rem; font-size:0.8rem; margin-top:0.6rem;">🔗 Copy Link</button>
         <div id="altAddresses" style="display:none; margin-top:1rem; text-align:left;">
           <p class="muted center" style="margin-bottom:0.5rem;">Scan not working? Your device has more than one network address (common when hosting from a phone with Wi-Fi + hotspot both active) - try one of these instead:</p>
           <div id="altAddressList"></div>
@@ -34,13 +34,13 @@
       </div>
 
       <div class="card">
-        <h3>Players (<span id="playerCount">0</span>)</h3>
+        <h3>👥 Players (<span id="playerCount">0</span>)</h3>
         <ul id="rosterList" class="player-list"></ul>
         <p class="muted center" id="rosterEmpty">Waiting for players to join...</p>
       </div>
 
       <div class="card">
-        <h3>Role Allocation Mode</h3>
+        <h3>🎲 Role Allocation Mode</h3>
         <select id="assignmentMode">
           <option value="selected_random">Mode 2: Random from Enabled Roles (Toggles)</option>
           <option value="full_random">Mode 1: Full Random (All Roles Pool)</option>
@@ -51,7 +51,7 @@
 
       <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
-          <h3 style="margin:0;">Roles Setup</h3>
+          <h3 style="margin:0;">🎭 Roles Setup</h3>
           <div style="display:flex; gap:0.35rem;">
             <button class="secondary" style="width:auto; padding:0.25rem 0.6rem; font-size:0.75rem; margin:0;" onclick="toggleAllRoles(true)">Enable All</button>
             <button class="secondary" style="width:auto; padding:0.25rem 0.6rem; font-size:0.75rem; margin:0;" onclick="toggleAllRoles(false)">Disable All</button>
@@ -61,7 +61,7 @@
       </div>
 
       <div class="card">
-        <h3>Game Rules</h3>
+        <h3>📜 Game Rules</h3>
         <div class="toggle-row">
           <label for="firstNightImmunity">
             <strong>First Night Kill Protection</strong><br>
@@ -93,12 +93,12 @@
       </div>
 
       <div class="card">
-        <h3>Timer</h3>
+        <h3>⏱️ Timer</h3>
         <label class="muted">Day discussion timer (seconds, 0 = off)</label>
         <input type="number" id="dayTimer" value="180" min="0">
       </div>
 
-      <button id="startBtn" class="success" disabled>Start Game</button>
+      <button id="startBtn" class="success" disabled>▶️ Start Game</button>
       <p class="muted center" id="startHint" style="margin-top:0.5rem;"></p>
       <p class="muted center" style="margin-top:0.75rem; font-size:0.8rem;">Want to play too? Join from a second device/tab with the same code, just like everyone else.</p>
     </div>
@@ -108,7 +108,7 @@
         <h2>🌙 Roles have been sent!</h2>
         <p class="muted">Each player has privately seen their own role on their phone.</p>
         <ul id="startedRoster" class="player-list" style="margin-top:1rem; text-align:left;"></ul>
-        <button id="beginNightBtn" class="danger big" style="margin-top:1rem; padding:0.9rem;">Begin Night 1</button>
+        <button id="beginNightBtn" class="danger big" style="margin-top:1rem; padding:0.9rem;">🌙 Begin Night 1</button>
       </div>
     </div>
 
@@ -125,24 +125,24 @@
         <h3 id="hostMorningHeading"></h3>
         <div id="hostMorningNotes"></div>
         <div id="hostMorningKilled"></div>
-        <button id="beginDayBtn" class="success big" style="margin-top:1rem; padding:0.9rem;">Start Day Discussion</button>
+        <button id="beginDayBtn" class="success big" style="margin-top:1rem; padding:0.9rem;">🌅 Start Day Discussion</button>
       </div>
     </div>
 
     <div id="screen-host-day" class="screen">
       <div class="card center">
-        <h3>Town Discussion</h3>
+        <h3>💬 Town Discussion</h3>
         <div id="hostDaySilenceNote"></div>
         <div id="hostDayCancelNote"></div>
         <div class="big center" id="hostDayTimerDisplay" style="color:var(--neon-solo); margin:1.25rem 0; font-size:2rem; font-weight:800; text-shadow:0 0 15px var(--neon-solo-glow);"></div>
-        <button id="openVoteBtn" class="purple big" style="padding:0.9rem;">Begin Voting</button>
-        <button id="skipToNightBtn" class="danger big" style="padding:0.9rem; display:none;">End Day &amp; Fall into Night</button>
+        <button id="openVoteBtn" class="purple big" style="padding:0.9rem;">🗳️ Begin Voting</button>
+        <button id="skipToNightBtn" class="danger big" style="padding:0.9rem; display:none;">🌙 End Day &amp; Fall into Night</button>
       </div>
     </div>
 
     <div id="screen-vote-progress" class="screen">
       <div class="card center">
-        <h3>Day Vote</h3>
+        <h3>🗳️ Day Vote</h3>
         <p class="muted">Waiting for all living players to vote...</p>
         <ul id="hostVoteProgressList" class="player-list" style="text-align:left; margin-top:0.75rem;"></ul>
       </div>
@@ -150,14 +150,14 @@
 
     <div id="screen-host-day-result" class="screen">
       <div class="card">
-        <h3>Day Vote Results</h3>
+        <h3>⚖️ Day Vote Results</h3>
         <div id="hostDayResultContent"></div>
-        <button id="nightFallsBtn" class="danger big" style="margin-top:1rem; padding:0.9rem;">Night Falls</button>
+        <button id="nightFallsBtn" class="danger big" style="margin-top:1rem; padding:0.9rem;">🌙 Night Falls</button>
       </div>
     </div>
 
     <div id="screen-host-game-over" class="screen">
-      <h1>Game Over</h1>
+      <h1>💀 Game Over</h1>
       <div class="card center">
         <div class="big" id="hostGameOverText" style="margin-bottom:1rem; color:var(--neon-solo); text-shadow:0 0 20px var(--neon-solo-glow);"></div>
         <div id="hostFinalRolesList" style="text-align:left; margin:1rem 0;"></div>
@@ -166,7 +166,7 @@
 
     <div id="exitSessionModal" class="modal">
       <div class="modal-content">
-        <h3>Exit Session?</h3>
+        <h3>🚪 Exit Session?</h3>
         <p style="margin:0.75rem 0; line-height:1.5;">This ends the game for everyone connected right now - all players will be disconnected and the room closed. This can't be undone.</p>
         <div class="grid-2">
           <button id="exitSessionCancelBtn" class="secondary">Cancel</button>

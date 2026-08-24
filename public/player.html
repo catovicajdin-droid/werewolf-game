@@ -8,16 +8,16 @@
 </head>
 <body>
   <div class="container">
-    <h1>Werewolf</h1>
+    <h1>🐺 Werewolf</h1>
 
     <div id="screen-join" class="screen active">
       <div class="card">
-        <h3>Join Game</h3>
+        <h3>🐾 Join Game</h3>
         <label class="muted">Room Code</label>
         <input type="text" id="roomCodeInput" placeholder="e.g. AB12C" autocomplete="off" style="text-transform:uppercase;">
         <label class="muted">Your Name</label>
         <input type="text" id="nameInput" placeholder="Enter your name" autocomplete="off">
-        <button id="joinBtn">Join Room</button>
+        <button id="joinBtn">🐾 Join Room</button>
         <p class="muted center" id="joinError" style="color:var(--neon-wolf); min-height:1.2em;"></p>
       </div>
     </div>
@@ -28,7 +28,7 @@
         <div class="giant" id="waitingName" style="color:var(--neon-safe); text-shadow:0 0 20px var(--neon-safe-glow); margin:0.75rem 0;"></div>
       </div>
       <div class="card">
-        <h3>Players (<span id="playerCount">0</span>)</h3>
+        <h3>👥 Players (<span id="playerCount">0</span>)</h3>
         <ul id="rosterList" class="player-list"></ul>
       </div>
     </div>
@@ -36,7 +36,7 @@
     <div id="screen-night" class="screen">
       <div class="card center privacy-box" id="nightGate">
         <p class="muted" style="margin-bottom:1rem;">Make sure no one else can see your screen.</p>
-        <button id="nightRevealBtn" class="purple big" style="padding:1rem;">Tap to View Your Role &amp; Action</button>
+        <button id="nightRevealBtn" class="purple big" style="padding:1rem;">👁️ Tap to View Your Role &amp; Action</button>
       </div>
       <div id="nightContent" style="display:none;">
         <div class="card">
@@ -49,7 +49,7 @@
           </div>
           <div id="nightMessage" class="center" style="margin: 0.5rem 0;"></div>
           <div id="nightFields" class="action-box"></div>
-          <button id="nightSubmitBtn" class="purple big" style="margin-top:1rem; padding:0.9rem;">Confirm Action</button>
+          <button id="nightSubmitBtn" class="purple big" style="margin-top:1rem; padding:0.9rem;">✅ Confirm Action</button>
         </div>
       </div>
     </div>
@@ -66,7 +66,7 @@
 
     <div id="screen-day" class="screen">
       <div class="card center">
-        <h3>Town Discussion</h3>
+        <h3>💬 Town Discussion</h3>
         <div id="daySilenceNote"></div>
         <div id="dayCancelNote"></div>
         <div class="big center" id="dayTimerDisplay" style="color:var(--neon-solo); margin:1.25rem 0; font-size:2rem; font-weight:800; text-shadow:0 0 15px var(--neon-solo-glow);"></div>
@@ -76,10 +76,10 @@
 
     <div id="screen-vote" class="screen">
       <div class="card">
-        <div class="center" style="margin-bottom:0.5rem;"><span class="muted">Day Vote</span></div>
+        <div class="center" style="margin-bottom:0.5rem;"><span class="muted">🗳️ Day Vote</span></div>
         <div id="voteTallyPanel" class="muted" style="margin-bottom:0.75rem; font-size:0.85rem;"></div>
         <div id="voteContent"></div>
-        <button id="voteSubmitBtn" class="danger big" style="margin-top:0.5rem; padding:0.9rem;">Submit Vote</button>
+        <button id="voteSubmitBtn" class="danger big" style="margin-top:0.5rem; padding:0.9rem;">🗳️ Submit Vote</button>
       </div>
     </div>
 
@@ -93,7 +93,7 @@
 
     <div id="screen-eliminated" class="screen">
       <div class="card center">
-        <h3>You Have Been Eliminated</h3>
+        <h3>💀 You Have Been Eliminated</h3>
         <span id="eliminatedRoleBadge" class="role-badge" style="margin-top:0.5rem;"></span>
         <div class="big" id="eliminatedRoleName" style="margin:0.5rem 0;"></div>
         <p class="muted" id="eliminatedReason"></p>
@@ -102,7 +102,7 @@
     </div>
 
     <div id="screen-game-over" class="screen">
-      <h1>Game Over</h1>
+      <h1>💀 Game Over</h1>
       <div class="card center">
         <div class="big" id="gameOverText" style="margin-bottom:1rem; color:var(--neon-solo); text-shadow:0 0 20px var(--neon-solo-glow);"></div>
         <div id="finalRolesList" style="text-align:left; margin:1rem 0;"></div>
@@ -111,7 +111,7 @@
 
     <div id="screen-error" class="screen">
       <div class="card center">
-        <h3>Disconnected</h3>
+        <h3>📡 Disconnected</h3>
         <p class="muted" id="errorText">Something went wrong.</p>
         <button id="backToJoinBtn" class="secondary">Back to Join Screen</button>
       </div>
@@ -119,7 +119,7 @@
 
     <div id="confirmSkipModal" class="modal">
       <div class="modal-content">
-        <h3>Unused Action</h3>
+        <h3>⚠️ Unused Action</h3>
         <p style="margin:0.75rem 0; line-height:1.5;">You haven't used your action tonight. Are you sure you want to skip it?</p>
         <div class="grid-2">
           <button id="confirmSkipCancelBtn" class="secondary">Cancel</button>
@@ -572,7 +572,7 @@
       // this (passiveTimerSeconds is 0 otherwise).
       clearInterval(passiveTimerInterval);
       const btn = $('nightSubmitBtn');
-      const defaultLabel = 'Confirm Action';
+      const defaultLabel = '✅ Confirm Action';
       if (msg.passiveTimerSeconds > 0) {
         let secs = msg.passiveTimerSeconds;
         btn.disabled = true;
