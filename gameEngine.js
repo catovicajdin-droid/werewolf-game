@@ -131,6 +131,11 @@ function initPlayerRuntime(p) {
   p.bullets = 2;
   p.arrows = 2;
   p.sleepCharges = 2;
+  // Vigilante's kill and inspect are two separate one-time resources (like
+  // Witch's heal/poison potions), not a single shared use - using one
+  // shouldn't lock the other out on a later night.
+  p.vigilanteBulletUsed = false;
+  p.vigilanteInspectUsed = false;
 }
 
 function freshNightActions() {
@@ -186,7 +191,8 @@ function freshGameState(settings) {
     doctorUsedTargets: [],
     bodyguardUsedTargets: [],
     grandmaUsedTargets: [],
-    redLadyUsedTargets: []
+    redLadyUsedTargets: [],
+    pendingNaughtySwap: null
   };
 }
 
@@ -218,7 +224,7 @@ function summarizeSubmission(fields, submission) {
   return lines;
 }
 
-function beginNight(game) {
+function beginNight(game, players) {
   game.nightWolfVotes = {};
   game.wolfVoteHistory = [];
   game.pacifistRevealTarget = null;
@@ -226,6 +232,25 @@ function beginNight(game) {
   game.votingDisabledThisRound = false;
   game.nightActions = freshNightActions();
   game.submitted = {};
+
+  // Naughty Boy's swap is picked one night but only takes effect at the
+  // start of the FOLLOWING night, not immediately - mirrors how Marksman
+  // marks a target now and executes it later. If either target died in the
+  // meantime, the swap just quietly fizzles rather than acting on a corpse.
+  let swappedPlayerIds = null;
+  if (game.pendingNaughtySwap) {
+    const { p1: p1Id, p2: p2Id } = game.pendingNaughtySwap;
+    const p1 = (players || []).find(p => p.id === p1Id && p.alive);
+    const p2 = (players || []).find(p => p.id === p2Id && p.alive);
+    if (p1 && p2) {
+      const tmp = p1.role;
+      p1.role = p2.role;
+      p2.role = tmp;
+      swappedPlayerIds = [p1.id, p2.id];
+    }
+    game.pendingNaughtySwap = null;
+  }
+  return { swappedPlayerIds };
 }
 
 // ---- Night prompt building (mirrors showNightPlayerTurn's action HTML) ----
@@ -422,7 +447,7 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
       passive = true;
     }
   } else if (player.role === 'naughty_boy' && !player.usedOneTime) {
-    fields.push({ type: 'select-pair', ids: ['swap1', 'swap2'], label: 'Swap Roles of Two Players (Once per game)', placeholders: ['Player 1...', 'Player 2...'], options: otherLiving.map(opt) });
+    fields.push({ type: 'select-pair', ids: ['swap1', 'swap2'], label: 'Swap Roles of Two Players (Once per game - takes effect at the start of tomorrow night, not tonight)', placeholders: ['Player 1...', 'Player 2...'], options: otherLiving.map(opt) });
   } else if (player.role === 'beast_hunter') {
     fields.push({ type: 'select', id: 'beastTrapSelect', label: 'Set Delayed Beast Trap', placeholder: 'Select player to trap...', options: otherLiving.map(opt) });
   } else if (player.role === 'marksman' && player.arrows > 0) {
@@ -436,9 +461,17 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
   } else if (player.role === 'gunner' && player.bullets > 0) {
     fields.push({ type: 'info', text: `Bullets remaining: ${player.bullets}` });
     fields.push({ type: 'select', id: 'gunnerShootSelect', label: 'Fire at a Player Tonight (Optional)', placeholder: 'Do not shoot tonight', options: otherLiving.map(opt) });
-  } else if (player.role === 'vigilante' && !player.usedOneTime) {
-    fields.push({ type: 'select', id: 'vigilanteMode', label: 'Vigilante: Use your bullet to eliminate, or inspect a role instead (cancels voting tomorrow). Pick at most one', options: [{ value: '', label: 'Do nothing tonight' }, { value: 'kill', label: 'Eliminate a target' }, { value: 'inspect', label: 'Inspect a role (cancels voting)' }] });
-    fields.push({ type: 'select', id: 'vigilanteTargetSelect', label: 'Target', placeholder: 'Select player...', options: otherLiving.map(opt) });
+  } else if (player.role === 'vigilante' && (!player.vigilanteBulletUsed || !player.vigilanteInspectUsed)) {
+    const modeOptions = [{ value: '', label: 'Do nothing tonight' }];
+    if (!player.vigilanteBulletUsed) modeOptions.push({ value: 'kill', label: 'Eliminate a target (your only bullet)' });
+    if (!player.vigilanteInspectUsed) modeOptions.push({ value: 'inspect', label: 'Inspect a role (cancels voting; one-time)' });
+    fields.push({ type: 'select', id: 'vigilanteMode', label: 'Vigilante: Choose Tonight\'s Action', options: modeOptions });
+    if (!player.vigilanteBulletUsed) {
+      fields.push({ type: 'select', id: 'vigilanteTargetSelect', label: 'Target to Eliminate', placeholder: 'Select player...', options: otherLiving.map(opt), dependsOn: { id: 'vigilanteMode', equals: 'kill' } });
+    }
+    if (!player.vigilanteInspectUsed) {
+      fields.push({ type: 'inspect', id: 'vigilanteInspectTarget', inspectKind: 'vigilante', label: 'Target to Inspect', placeholder: 'Select player...', options: otherLiving.map(opt), dependsOn: { id: 'vigilanteMode', equals: 'inspect' } });
+    }
   } else if (player.role === 'mayor' && !game.mayorRevealed) {
     fields.push({ type: 'checkbox', id: 'mayorRevealCheck', label: 'Reveal yourself as Mayor', description: 'Your vote counts as 2 starting tomorrow.' });
   } else {
@@ -460,7 +493,7 @@ function applyInspect(game, players, player, inspectKind, targetId, targetId2) {
     const r = ROLES[tgt.role];
     return { name: tgt.name, roleName: r.name, team: r.team, desc: r.desc };
   }
-  if (inspectKind === 'wolfseer') {
+  if (inspectKind === 'wolfseer' || inspectKind === 'vigilante') {
     const tgt = players.find(p => p.id === targetId);
     if (!tgt) return null;
     const r = ROLES[tgt.role];
@@ -588,14 +621,10 @@ function applyNightSubmission(game, players, player, submission) {
     }
   }
   if (v('swap1') && v('swap2') && v('swap1') !== v('swap2')) {
-    const p1 = players.find(p => p.id === v('swap1'));
-    const p2 = players.find(p => p.id === v('swap2'));
-    if (p1 && p2) {
-      const tmp = p1.role;
-      p1.role = p2.role;
-      p2.role = tmp;
-      player.usedOneTime = true;
-    }
+    // Queued, not applied - beginNight() performs the actual swap at the
+    // start of the FOLLOWING night, once per game.
+    game.pendingNaughtySwap = { p1: v('swap1'), p2: v('swap2') };
+    player.usedOneTime = true;
   }
   if (v('beastTrapSelect')) {
     game.beastTrapped = v('beastTrapSelect');
@@ -611,9 +640,15 @@ function applyNightSubmission(game, players, player, submission) {
     game.nightActions.gunnerShot = { gunnerId: player.id, targetId: v('gunnerShootSelect') };
     player.bullets--;
   }
-  if (submission.vigilanteMode && v('vigilanteTargetSelect')) {
-    game.nightActions.vigilanteAction = { vigId: player.id, targetId: v('vigilanteTargetSelect'), mode: submission.vigilanteMode };
-    player.usedOneTime = true;
+  if (submission.vigilanteMode === 'kill' && v('vigilanteTargetSelect')) {
+    game.nightActions.vigilanteAction = { vigId: player.id, targetId: v('vigilanteTargetSelect'), mode: 'kill' };
+    player.vigilanteBulletUsed = true;
+  } else if (submission.vigilanteMode === 'inspect') {
+    // The actual role reveal already happened live on the Vigilante's own
+    // screen via night:inspect - this just records that inspect mode was
+    // chosen, so resolveNight() can apply its "cancels voting" side effect.
+    game.nightActions.vigilanteAction = { vigId: player.id, mode: 'inspect' };
+    player.vigilanteInspectUsed = true;
   }
   if (submission.mayorRevealCheck) {
     game.mayorRevealed = true;
@@ -767,10 +802,11 @@ function resolveNight(game, players, headhunterTargets) {
   if (game.nightActions.vigilanteAction) {
     const { vigId, targetId, mode } = game.nightActions.vigilanteAction;
     const v = players.find(p => p.id === vigId);
-    const tgt = players.find(p => p.id === targetId);
-    if (v && tgt) {
-      if (mode === 'kill') deaths.push({ id: tgt.id, reason: `Eliminated by Vigilante (${v.name})` });
-      else if (mode === 'inspect') game.votingDisabledThisRound = true;
+    if (mode === 'kill') {
+      const tgt = players.find(p => p.id === targetId);
+      if (v && tgt) deaths.push({ id: tgt.id, reason: `Eliminated by Vigilante (${v.name})` });
+    } else if (mode === 'inspect') {
+      game.votingDisabledThisRound = true;
     }
   }
 

@@ -130,21 +130,23 @@ function buildExtraFor(player, players, room) {
   return null;
 }
 
+function sendRoleAssignTo(player, players, room) {
+  const r = ROLES[player.role];
+  const extra = buildExtraFor(player, players, room);
+  player.lastExtra = extra;
+  send(player.ws, {
+    type: 'role:assign',
+    role: player.role,
+    name: r.name,
+    team: r.team,
+    desc: r.desc,
+    extra
+  });
+}
+
 function sendPrivateRoles(room) {
   const players = Array.from(room.players.values());
-  players.forEach(p => {
-    const r = ROLES[p.role];
-    const extra = buildExtraFor(p, players, room);
-    p.lastExtra = extra;
-    send(p.ws, {
-      type: 'role:assign',
-      role: p.role,
-      name: r.name,
-      team: r.team,
-      desc: r.desc,
-      extra
-    });
-  });
+  players.forEach(p => sendRoleAssignTo(p, players, room));
 }
 
 function makeRoom(hostWs) {
@@ -161,7 +163,11 @@ function makeRoom(hostWs) {
     // reattaches (tab reload, phone lock) can be resynced to exactly what
     // they were last looking at instead of losing the game's current state.
     lastMorningReport: null,
-    lastDayBegin: null,
+    // The day-discussion timer is tracked as an absolute deadline rather
+    // than a fixed duration, so a resync (reload/reconnect) reports the
+    // actual time left instead of restarting the countdown from the top.
+    dayBeginStatic: null,
+    dayDiscussionDeadline: null,
     lastDayResult: null,
     lastGameOver: null
   };
@@ -376,15 +382,14 @@ async function handleMessage(ws, msg) {
       if (!room || !ws.isHost || !room.game || room.phase !== 'morning') return;
       room.phase = 'day-discussion';
       const votingCancelled = !!room.game.pacifistRevealTarget || room.game.votingDisabledThisRound;
-      const payload = {
-        type: 'day:begin',
+      room.dayBeginStatic = {
         round: room.game.round,
         silencedName: room.game.silencedId ? (room.players.get(room.game.silencedId) || {}).name || null : null,
         votingCancelled,
-        cancelReason: room.game.pacifistRevealTarget ? 'pacifist' : (room.game.votingDisabledThisRound ? 'vigilante' : null),
-        dayTimerSeconds: room.game.settings.dayTimer
+        cancelReason: room.game.pacifistRevealTarget ? 'pacifist' : (room.game.votingDisabledThisRound ? 'vigilante' : null)
       };
-      room.lastDayBegin = payload;
+      room.dayDiscussionDeadline = room.game.settings.dayTimer > 0 ? Date.now() + room.game.settings.dayTimer * 1000 : null;
+      const payload = buildDayBeginPayload(room);
       send(room.hostWs, payload);
       // Eliminated players don't get another go at the discussion screen -
       // they already got their player:eliminated notice and stay parked on
@@ -454,8 +459,18 @@ async function handleMessage(ws, msg) {
 }
 
 function startNight(room) {
-  engine.beginNight(room.game);
   const players = Array.from(room.players.values());
+  const { swappedPlayerIds } = engine.beginNight(room.game, players);
+  if (swappedPlayerIds) {
+    // A Naughty Boy swap just resolved - the affected players' own
+    // role:assign (name/team/desc, shown on their waiting/recap screens)
+    // would otherwise go stale until the game ends, since only the night
+    // prompt itself gets fresh role data on its own.
+    swappedPlayerIds.forEach(id => {
+      const p = room.players.get(id);
+      if (p) sendRoleAssignTo(p, players, room);
+    });
+  }
   const living = players.filter(p => p.alive);
   room.game.pendingSubmitters = living.map(p => p.id);
   room.phase = 'night';
@@ -464,6 +479,11 @@ function startNight(room) {
     const prompt = engine.buildNightPrompt(room.game, players, room.headhunterTargets, player);
     player.pendingNightFields = prompt.fields;
     player.lastNightRecap = null;
+    const passiveTimerSeconds = passiveTimerSecondsFor(room, prompt);
+    // Tracked as an absolute deadline (not just the flat duration below) so
+    // a reconnect mid-countdown reports the actual time left instead of
+    // handing back a fresh 7 seconds every time the prompt resends.
+    player.passiveTimerDeadline = passiveTimerSeconds > 0 ? Date.now() + passiveTimerSeconds * 1000 : null;
     send(player.ws, {
       type: 'night:prompt',
       round: room.game.round,
@@ -471,7 +491,7 @@ function startNight(room) {
       roleName: ROLES[player.role].name,
       team: ROLES[player.role].team,
       roleDesc: ROLES[player.role].desc,
-      passiveTimerSeconds: passiveTimerSecondsFor(room, prompt),
+      passiveTimerSeconds,
       ...prompt
     });
   });
@@ -487,6 +507,24 @@ function startNight(room) {
 // before the client will let them confirm, so a quick pass isn't a tell.
 function passiveTimerSecondsFor(room, prompt) {
   return (prompt.passive && room.game.settings.passiveTimerToggle) ? 7 : 0;
+}
+
+// Remaining time on a player's passive-buffer countdown, computed from the
+// deadline startNight() set - used when RESENDING the prompt (reconnect)
+// so the wait doesn't restart from 7s every time.
+function remainingPassiveTimerSeconds(player) {
+  if (!player.passiveTimerDeadline) return 0;
+  return Math.max(0, Math.round((player.passiveTimerDeadline - Date.now()) / 1000));
+}
+
+// Same idea for the day-discussion timer - recomputes remaining seconds
+// from the room's absolute deadline every time it's sent (initial
+// broadcast or a later resync), instead of replaying the original duration.
+function buildDayBeginPayload(room) {
+  const dayTimerSeconds = room.dayDiscussionDeadline
+    ? Math.max(0, Math.round((room.dayDiscussionDeadline - Date.now()) / 1000))
+    : 0;
+  return { type: 'day:begin', ...room.dayBeginStatic, dayTimerSeconds };
 }
 
 function buildProgressPayload(room) {
@@ -683,14 +721,14 @@ function sendPlayerCurrentState(room, player) {
       send(player.ws, {
         type: 'night:prompt', round: room.game.round,
         role: player.role, roleName: r.name, team: r.team, roleDesc: r.desc,
-        passiveTimerSeconds: passiveTimerSecondsFor(room, prompt),
+        passiveTimerSeconds: remainingPassiveTimerSeconds(player),
         ...prompt
       });
     }
   } else if (room.phase === 'morning') {
     send(player.ws, { type: 'night:ack', recapLines: player.lastNightRecap || [], resync: true });
   } else if (room.phase === 'day-discussion') {
-    if (room.lastDayBegin) send(player.ws, room.lastDayBegin);
+    if (room.dayBeginStatic) send(player.ws, buildDayBeginPayload(room));
   } else if (room.phase === 'day-vote') {
     if (room.game.submitted[player.id]) {
       send(player.ws, { type: 'vote:ack', recapLine: player.lastVoteRecap || '', resync: true });
@@ -722,7 +760,7 @@ function sendHostCurrentState(room) {
   } else if (room.phase === 'morning') {
     if (room.lastMorningReport) send(room.hostWs, room.lastMorningReport);
   } else if (room.phase === 'day-discussion') {
-    if (room.lastDayBegin) send(room.hostWs, room.lastDayBegin);
+    if (room.dayBeginStatic) send(room.hostWs, buildDayBeginPayload(room));
   } else if (room.phase === 'day-results') {
     if (room.lastDayResult) send(room.hostWs, room.lastDayResult);
   } else if (room.phase === 'game-over') {

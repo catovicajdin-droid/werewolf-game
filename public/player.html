@@ -400,6 +400,18 @@
           inspectResultEls[f.id] = resultDiv;
           inspectKindByField[f.id] = f.inspectKind;
           getters[f.id] = () => null;
+
+          if (f.dependsOn) {
+            const update = () => {
+              const c = document.getElementById(f.dependsOn.id);
+              wrap.style.display = (c && c.value === f.dependsOn.equals) ? '' : 'none';
+            };
+            setTimeout(() => {
+              const c = document.getElementById(f.dependsOn.id);
+              if (c) c.addEventListener('change', update);
+              update();
+            }, 0);
+          }
           return;
         }
 
@@ -458,7 +470,7 @@
       const el = inspectResultEls[fieldId];
       const kind = inspectKindByField[fieldId];
       if (!el || !result) return;
-      if (kind === 'seer' || kind === 'wolfseer') {
+      if (kind === 'seer' || kind === 'wolfseer' || kind === 'vigilante') {
         el.innerHTML = `<div class="inspection-result-box"><div style="font-weight:700; margin-bottom:0.25rem;">${result.name} is: <span class="role-badge badge-${result.team}">${result.roleName}</span></div><div class="muted" style="font-size:0.8rem; line-height:1.4;">${result.desc}</div></div>`;
       } else if (kind === 'aura') {
         el.innerHTML = `<div class="inspection-result-box"><strong>${result.name}'s Aura:</strong> ${result.evil ? '<span class="role-badge badge-wolf">EVIL</span>' : '<span class="role-badge badge-village">GOOD</span>'}</div>`;
