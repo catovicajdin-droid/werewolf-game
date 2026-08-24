@@ -297,6 +297,24 @@ async function handleMessage(ws, msg) {
       break;
     }
 
+    case 'host:reorder-players': {
+      const room = rooms.get(ws.roomCode);
+      if (!room || !ws.isHost) return;
+      if (room.phase !== 'lobby') return;
+      const order = Array.isArray(msg.playerIds) ? msg.playerIds : [];
+      // Only accept a reorder that's an exact permutation of the room's
+      // current players - anything else (stale order from before someone
+      // joined/left/was kicked) is silently ignored rather than partially
+      // applied, since a Map rebuilt from a mismatched list would either
+      // drop players or leave stragglers in join order.
+      if (order.length !== room.players.size || !order.every(id => room.players.has(id))) return;
+      const reordered = new Map();
+      order.forEach(id => reordered.set(id, room.players.get(id)));
+      room.players = reordered;
+      broadcastRoster(room);
+      break;
+    }
+
     case 'host:end-session': {
       const room = rooms.get(ws.roomCode);
       if (!room || !ws.isHost) return;

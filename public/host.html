@@ -351,10 +351,14 @@
     function renderRoster() {
       $('playerCount').textContent = players.length;
       $('rosterEmpty').style.display = players.length ? 'none' : 'block';
-      $('rosterList').innerHTML = players.map(p => `
+      $('rosterList').innerHTML = players.map((p, i) => `
         <li>
           <span><span class="status-dot ${p.connected ? '' : 'offline'}"></span>${p.name}</span>
-          <button class="secondary" style="width:auto; padding:0.2rem 0.5rem;" onclick="kickPlayer('${p.id}')">Remove</button>
+          <span style="display:flex; gap:0.3rem;">
+            <button class="secondary" style="width:auto; padding:0.2rem 0.5rem;" onclick="movePlayer('${p.id}', -1)" ${i === 0 ? 'disabled' : ''} title="Move up">▲</button>
+            <button class="secondary" style="width:auto; padding:0.2rem 0.5rem;" onclick="movePlayer('${p.id}', 1)" ${i === players.length - 1 ? 'disabled' : ''} title="Move down">▼</button>
+            <button class="secondary" style="width:auto; padding:0.2rem 0.5rem;" onclick="kickPlayer('${p.id}')">Remove</button>
+          </span>
         </li>
       `).join('');
       const enough = players.length >= 4;
@@ -375,6 +379,19 @@
 
     window.kickPlayer = function (id) {
       ws.send(JSON.stringify({ type: 'host:kick', playerId: id }));
+    };
+
+    // Reordering only applies before the game starts - the server enforces
+    // this too (host:reorder-players is a no-op outside the lobby phase),
+    // since role assignment and things like Mad Scientist's "adjacent
+    // player" mechanic are keyed off this same list order once play begins.
+    window.movePlayer = function (id, delta) {
+      const idx = players.findIndex(p => p.id === id);
+      const swapWith = idx + delta;
+      if (idx === -1 || swapWith < 0 || swapWith >= players.length) return;
+      [players[idx], players[swapWith]] = [players[swapWith], players[idx]];
+      renderRoster();
+      ws.send(JSON.stringify({ type: 'host:reorder-players', playerIds: players.map(p => p.id) }));
     };
 
     $('assignmentMode').addEventListener('change', e => {
