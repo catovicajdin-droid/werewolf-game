@@ -76,6 +76,20 @@
           </label>
           <input type="checkbox" id="allowSkipVotes">
         </div>
+        <div class="toggle-row">
+          <label for="passiveTimerToggle">
+            <strong>Passive Role Buffer Timer (7s)</strong><br>
+            <span class="muted">Enforces a 7-second wait on passive roles to prevent telltale quick passes</span>
+          </label>
+          <input type="checkbox" id="passiveTimerToggle" checked>
+        </div>
+        <div class="toggle-row">
+          <label for="hideVoteCounts">
+            <strong>Hide Live Vote Numbers</strong><br>
+            <span class="muted">Conceal running vote tallies during day voting</span>
+          </label>
+          <input type="checkbox" id="hideVoteCounts" checked>
+        </div>
       </div>
 
       <div class="card">
@@ -376,6 +390,8 @@
         settings: {
           firstNightImmunity: $('firstNightImmunity').checked,
           allowSkipVotes: $('allowSkipVotes').checked,
+          passiveTimerToggle: $('passiveTimerToggle').checked,
+          hideVoteCounts: $('hideVoteCounts').checked,
           dayTimer: parseInt($('dayTimer').value) || 0
         }
       }));

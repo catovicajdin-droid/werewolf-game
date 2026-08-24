@@ -315,6 +315,7 @@ async function handleMessage(ws, msg) {
         firstNightImmunity: !!msg.settings?.firstNightImmunity,
         allowSkipVotes: !!msg.settings?.allowSkipVotes,
         hideVoteCounts: !!msg.settings?.hideVoteCounts,
+        passiveTimerToggle: !!msg.settings?.passiveTimerToggle,
         dayTimer: Number.isFinite(msg.settings?.dayTimer) ? Math.max(0, msg.settings.dayTimer) : 180
       };
 
@@ -385,7 +386,10 @@ async function handleMessage(ws, msg) {
       };
       room.lastDayBegin = payload;
       send(room.hostWs, payload);
-      room.players.forEach(p => send(p.ws, payload));
+      // Eliminated players don't get another go at the discussion screen -
+      // they already got their player:eliminated notice and stay parked on
+      // it until the game ends.
+      room.players.forEach(p => { if (p.alive) send(p.ws, payload); });
       break;
     }
 
@@ -467,12 +471,22 @@ function startNight(room) {
       roleName: ROLES[player.role].name,
       team: ROLES[player.role].team,
       roleDesc: ROLES[player.role].desc,
+      passiveTimerSeconds: passiveTimerSecondsFor(room, prompt),
       ...prompt
     });
   });
 
   broadcastNightProgress(room);
   maybeResolveNight(room);
+}
+
+// A passive player (nothing to do this night) would otherwise submit
+// instantly, and since night:progress broadcasts who's submitted to every
+// player in real time, that speed alone can tip others off that they're
+// passive - the "Passive Role Buffer Timer" setting enforces a short wait
+// before the client will let them confirm, so a quick pass isn't a tell.
+function passiveTimerSecondsFor(room, prompt) {
+  return (prompt.passive && room.game.settings.passiveTimerToggle) ? 7 : 0;
 }
 
 function buildProgressPayload(room) {
@@ -508,12 +522,26 @@ function broadcastWolfVoteUpdate(room) {
 }
 
 // Same idea for the day vote - villagers should see who's voting for whom
-// as it happens, not just after everyone's locked in.
+// as it happens, not just after everyone's locked in - unless the host has
+// the "Hide Live Vote Numbers" setting on for this game, in which case the
+// running tally stays concealed until the host reveals the result.
 function broadcastDayVoteUpdate(room) {
+  if (room.game.settings.hideVoteCounts) return;
   const players = Array.from(room.players.values());
   const pending = players.filter(p => p.alive && !room.game.submitted[p.id]);
   pending.forEach(p => {
     send(p.ws, { type: 'vote:tally-update', dayVoteHistory: room.game.dayVoteHistory });
+  });
+}
+
+// Tells a player the moment they die (night kill, lynch, or any chained
+// death) so their client leaves whatever screen it was on for a dedicated
+// "you're out" screen, instead of sitting on a stale prompt/waiting screen
+// that still implies they have something left to do once the host advances.
+function notifyEliminated(room, killedPlayers) {
+  killedPlayers.forEach(p => {
+    const r = ROLES[p.role];
+    send(p.ws, { type: 'player:eliminated', reason: p.deathReason, roleName: r.name, team: r.team });
   });
 }
 
@@ -523,6 +551,7 @@ function maybeResolveNight(room) {
 
   const players = Array.from(room.players.values());
   const { killed, gameOverMsg } = engine.resolveNight(room.game, players, room.headhunterTargets);
+  notifyEliminated(room, killed);
 
   if (gameOverMsg) {
     endGame(room, gameOverMsg);
@@ -589,6 +618,7 @@ function maybeResolveVotes(room) {
 
   const players = Array.from(room.players.values());
   const result = engine.resolveVotes(room.game, players, room.headhunterTargets);
+  notifyEliminated(room, result.killed);
 
   if (result.gameOverMsg) {
     endGame(room, result.gameOverMsg);
@@ -634,7 +664,14 @@ function sendPlayerCurrentState(room, player) {
     extra: player.lastExtra || null
   });
 
-  if (!room.game || !player.alive) return;
+  if (!room.game) return;
+
+  if (!player.alive) {
+    // A reconnecting dead player should land back on the eliminated screen,
+    // not be left on whatever they were looking at when they died.
+    send(player.ws, { type: 'player:eliminated', reason: player.deathReason, roleName: r.name, team: r.team });
+    return;
+  }
 
   if (room.phase === 'night') {
     if (room.game.submitted[player.id]) {
@@ -646,6 +683,7 @@ function sendPlayerCurrentState(room, player) {
       send(player.ws, {
         type: 'night:prompt', round: room.game.round,
         role: player.role, roleName: r.name, team: r.team, roleDesc: r.desc,
+        passiveTimerSeconds: passiveTimerSecondsFor(room, prompt),
         ...prompt
       });
     }

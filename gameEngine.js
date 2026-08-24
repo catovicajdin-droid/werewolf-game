@@ -182,7 +182,8 @@ function freshGameState(settings) {
     toughGuyAttacked: false,
     marksmanTargets: {},
     submitted: {},
-    dayVoteHistory: []
+    dayVoteHistory: [],
+    doctorUsedTargets: []
   };
 }
 
@@ -293,16 +294,32 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
       });
     }
 
+    let hasWolfSpecialAction = false;
     if (player.role === 'kitten_wolf' && !player.usedOneTime) {
       fields.push({ type: 'select', id: 'kittenBiteSelect', label: 'Kitten Wolf: Bite & Convert to Werewolf instead', placeholder: 'Do not bite tonight', options: nonWolves.map(opt) });
+      hasWolfSpecialAction = true;
     } else if (player.role === 'nightmare_werewolf' && player.sleepCharges > 0) {
       fields.push({ type: 'select', id: 'nightmareTarget', label: `Nightmare Werewolf: Put a player to sleep tonight (${player.sleepCharges} use${player.sleepCharges !== 1 ? 's' : ''} left)`, placeholder: 'None (skip)', options: otherLiving.map(opt) });
+      hasWolfSpecialAction = true;
     } else if (player.role === 'wolf_seer') {
       fields.push({ type: 'inspect', id: 'wolfSeerTarget', inspectKind: 'wolfseer', label: 'Wolf Seer: Uncover Exact Role', placeholder: 'Select player to uncover...', options: otherLiving.map(opt) });
+      hasWolfSpecialAction = true;
     } else if (player.role === 'sorcerer') {
       fields.push({ type: 'inspect', id: 'sorcererTarget', inspectKind: 'sorcerer', label: 'Sorcerer: Check if Seer or Werewolf', placeholder: 'Select player to check...', options: otherLiving.map(opt) });
+      hasWolfSpecialAction = true;
     } else if (player.role === 'junior_werewolf') {
       fields.push({ type: 'select', id: 'juniorSelect', label: 'Junior Werewolf: Choose Revenge Target', placeholder: 'Select target to drag down if you die...', options: otherLiving.map(opt) });
+      hasWolfSpecialAction = true;
+    }
+
+    // With first-night immunity on, the pack has no kill vote to cast - if
+    // this wolf also has no other independent action available (a plain
+    // Werewolf, or a special role whose own action is already exhausted),
+    // there is genuinely nothing to do, so mark them passive instead of
+    // leaving them wrongly asked "are you sure you want to skip?" over an
+    // action that was never on offer in the first place.
+    if (game.round === 1 && game.settings.firstNightImmunity && !hasWolfSpecialAction) {
+      passive = true;
     }
   } else if (player.role === 'pacifist' && !player.usedOneTime) {
     fields.push({ type: 'select', id: 'pacifistTargetSelect', label: 'Pacifist: Public Revelation & Peace (Once per game)', description: 'Select a player to publicly reveal their exact role to the town tomorrow morning and cancel daytime voting.', placeholder: 'Do not use tonight', options: otherLiving.map(opt) });
@@ -332,7 +349,13 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
   } else if (player.role === 'detective') {
     fields.push({ type: 'inspect-pair', ids: ['det1', 'det2'], inspectKind: 'detective', label: 'Compare Team of Two Players', placeholders: ['Player 1...', 'Player 2...'], options: otherLiving.map(opt) });
   } else if (player.role === 'doctor') {
-    fields.push({ type: 'select', id: 'doctorProtectSelect', label: 'Select a Player to Protect Tonight', placeholder: 'Select player...', options: living.map(opt) });
+    const eligible = living.filter(p => !game.doctorUsedTargets.includes(p.id));
+    if (eligible.length > 0) {
+      fields.push({ type: 'select', id: 'doctorProtectSelect', label: 'Select a Player to Protect Tonight (each player can only be protected once per game)', placeholder: 'Select player...', options: eligible.map(opt) });
+    } else {
+      message = 'You have already protected every living player once - no new targets remain.';
+      passive = true;
+    }
   } else if (player.role === 'bodyguard') {
     fields.push({ type: 'select', id: 'bodyguardProtectSelect', label: 'Select a Player to Bodyguard (You die in their place if attacked)', placeholder: 'Select player...', options: otherLiving.map(opt) });
   } else if (player.role === 'witch') {
@@ -478,6 +501,9 @@ function applyNightSubmission(game, players, player, submission) {
   }
   if (v('doctorProtectSelect')) {
     game.nightActions.protectId = v('doctorProtectSelect');
+    if (!game.doctorUsedTargets.includes(game.nightActions.protectId)) {
+      game.doctorUsedTargets.push(game.nightActions.protectId);
+    }
   }
   if (v('bodyguardProtectSelect')) {
     game.nightActions.bodyguardId = { guardId: player.id, targetId: v('bodyguardProtectSelect') };
@@ -798,7 +824,7 @@ function resolveVotes(game, players, headhunterTargets) {
     else if (count === max) tied.push(id);
   });
 
-  const result = { eliminatedName: null, outcome: null, gameOverMsg: null, extraNotes: [] };
+  const result = { eliminatedName: null, outcome: null, gameOverMsg: null, extraNotes: [], killed: [] };
 
   if (tied.length === 1 && max > 0) {
     const elim = players.find(p => p.id === tied[0]);
@@ -820,7 +846,9 @@ function resolveVotes(game, players, headhunterTargets) {
       result.outcome = 'prince-survived';
       result.eliminatedName = elim.name;
     } else {
-      processCasualties(game, players, headhunterTargets, [{ id: elim.id, reason: 'Lynched by Village Majority Vote' }]);
+      const { killed, gameOverMsg } = processCasualties(game, players, headhunterTargets, [{ id: elim.id, reason: 'Lynched by Village Majority Vote' }]);
+      result.killed.push(...killed);
+      if (gameOverMsg) result.gameOverMsg = gameOverMsg;
       result.outcome = 'lynched';
       result.eliminatedName = elim.name;
     }
@@ -831,7 +859,9 @@ function resolveVotes(game, players, headhunterTargets) {
   if (game.toughGuyAttacked) {
     const tg = players.find(p => p.id === game.toughGuyAttacked);
     if (tg && tg.alive) {
-      processCasualties(game, players, headhunterTargets, [{ id: tg.id, reason: "Succumbed to previous night's wounds (Tough Guy)" }]);
+      const { killed, gameOverMsg } = processCasualties(game, players, headhunterTargets, [{ id: tg.id, reason: "Succumbed to previous night's wounds (Tough Guy)" }]);
+      result.killed.push(...killed);
+      if (gameOverMsg) result.gameOverMsg = gameOverMsg;
       result.extraNotes.push({ kind: 'tough-guy-died', name: tg.name });
     }
     game.toughGuyAttacked = false;

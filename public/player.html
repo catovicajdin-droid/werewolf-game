@@ -91,6 +91,16 @@
       </div>
     </div>
 
+    <div id="screen-eliminated" class="screen">
+      <div class="card center">
+        <h3>You Have Been Eliminated</h3>
+        <span id="eliminatedRoleBadge" class="role-badge" style="margin-top:0.5rem;"></span>
+        <div class="big" id="eliminatedRoleName" style="margin:0.5rem 0;"></div>
+        <p class="muted" id="eliminatedReason"></p>
+        <p class="muted" style="margin-top:0.75rem;">You can keep watching until the game ends.</p>
+      </div>
+    </div>
+
     <div id="screen-game-over" class="screen">
       <h1>Game Over</h1>
       <div class="card center">
@@ -157,6 +167,17 @@
     let haveRole = false;
     let currentRoleInfo = null; // { name, team, desc } for the waiting/recap screens
     let currentNightPassive = false;
+    let iAmDead = false;
+    let passiveTimerInterval = null;
+
+    function renderEliminated(msg) {
+      iAmDead = true;
+      $('eliminatedRoleBadge').className = `role-badge badge-${msg.team}`;
+      $('eliminatedRoleBadge').textContent = `${msg.team.toUpperCase()} TEAM`;
+      $('eliminatedRoleName').textContent = msg.roleName;
+      $('eliminatedReason').textContent = msg.reason || '';
+      switchScreen('screen-eliminated');
+    }
 
     function connect() {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -200,8 +221,10 @@
           haveRole = true;
           currentRoleInfo = { name: msg.name, team: msg.team, desc: msg.desc };
           $('waitingStatusText').textContent = 'Your role has been set - waiting for the Game Master to begin the night...';
+        } else if (msg.type === 'player:eliminated') {
+          renderEliminated(msg);
         } else if (msg.type === 'night:prompt') {
-          renderNightPrompt(msg);
+          if (!iAmDead) renderNightPrompt(msg);
         } else if (msg.type === 'night:inspect-result') {
           renderInspectResult(msg.fieldId, msg.result);
         } else if (msg.type === 'night:wolf-vote-update') {
@@ -211,9 +234,9 @@
         } else if (msg.type === 'night:progress') {
           renderProgressList('nightProgressList', msg.players);
         } else if (msg.type === 'day:begin') {
-          renderDayBegin(msg);
+          if (!iAmDead) renderDayBegin(msg);
         } else if (msg.type === 'vote:prompt') {
-          renderVotePrompt(msg);
+          if (!iAmDead) renderVotePrompt(msg);
         } else if (msg.type === 'vote:tally-update') {
           renderVoteTally(msg.dayVoteHistory);
         } else if (msg.type === 'vote:ack') {
@@ -540,6 +563,34 @@
         $('nightGate').style.display = 'none';
         $('nightContent').style.display = '';
       };
+
+      // Passive Role Buffer Timer: a player with nothing to do would submit
+      // instantly, and since night:progress broadcasts submission status to
+      // everyone live, that speed alone can tip others off that they're
+      // passive - hold the button for a few seconds so a quick pass isn't
+      // a tell. Only the host's "Passive Role Buffer Timer" setting enables
+      // this (passiveTimerSeconds is 0 otherwise).
+      clearInterval(passiveTimerInterval);
+      const btn = $('nightSubmitBtn');
+      const defaultLabel = 'Confirm Action';
+      if (msg.passiveTimerSeconds > 0) {
+        let secs = msg.passiveTimerSeconds;
+        btn.disabled = true;
+        btn.textContent = `Please wait... (${secs}s)`;
+        passiveTimerInterval = setInterval(() => {
+          secs--;
+          if (secs <= 0) {
+            clearInterval(passiveTimerInterval);
+            btn.disabled = false;
+            btn.textContent = defaultLabel;
+          } else {
+            btn.textContent = `Please wait... (${secs}s)`;
+          }
+        }, 1000);
+      } else {
+        btn.disabled = false;
+        btn.textContent = defaultLabel;
+      }
 
       switchScreen('screen-night');
     }
