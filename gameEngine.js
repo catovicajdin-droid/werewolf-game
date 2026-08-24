@@ -54,7 +54,45 @@ function sanitizeRoleDependencies(rolesList, total) {
     }
   }
 
+  // Cursed Human converts into a real Werewolf if attacked by one - with no
+  // other wolf-team role in the game, no one can ever attack them, so the
+  // conversion (and their whole reason for existing) can never trigger.
+  // Turn exactly one Cursed Human into a real Werewolf so the pack always
+  // has someone else in it; any additional Cursed Humans are left as-is.
+  if (roles.includes('cursed_human') && !roles.some(r => r !== 'cursed_human' && ROLES[r].team === 'wolf')) {
+    const idx = roles.indexOf('cursed_human');
+    roles[idx] = 'werewolf';
+  }
+
   return roles;
+}
+
+// Manual/custom mode lets the host set exact counts, so a broken dependency
+// (Seer Apprentice with no Seer, a lone Sibling, etc.) reflects a mistake
+// worth surfacing rather than silently reassigning - unlike the random
+// modes above, which auto-correct because no one hand-picked those roles.
+function validateManualRoleDependencies(customRoleCounts) {
+  const c = customRoleCounts || {};
+  const get = (k) => c[k] || 0;
+  const errors = [];
+
+  if (get('seer_apprentice') > 0 && get('seer') === 0) {
+    errors.push('Seer Apprentice requires the Seer to also be selected.');
+  }
+  if (get('sect_hunter') > 0 && get('sect_leader') === 0) {
+    errors.push('Sect Hunter requires the Sect Leader to also be selected.');
+  }
+  if (get('sibling') === 1) {
+    errors.push('Sibling requires at least 2 (or 0) - a single Sibling has no one to recognize.');
+  }
+  if (get('cursed_human') > 0) {
+    const hasOtherWolf = Object.keys(ROLES).some(k => k !== 'cursed_human' && ROLES[k].team === 'wolf' && get(k) > 0);
+    if (!hasOtherWolf) {
+      errors.push('Cursed Human requires at least one other Werewolf-team role to also be selected.');
+    }
+  }
+
+  if (errors.length) throw new Error(errors.join(' '));
 }
 
 // Mirrors startGame()'s role-assignment logic in index.html.
@@ -63,6 +101,7 @@ function computeRoles(total, config) {
   let roles = [];
 
   if (assignmentMode === 'custom') {
+    validateManualRoleDependencies(customRoleCounts);
     Object.keys(ROLES).forEach(key => {
       const count = (customRoleCounts && customRoleCounts[key]) || 0;
       for (let i = 0; i < count; i++) roles.push(key);
@@ -192,7 +231,12 @@ function freshGameState(settings) {
     bodyguardUsedTargets: [],
     grandmaUsedTargets: [],
     redLadyUsedTargets: [],
-    pendingNaughtySwap: null
+    pendingNaughtySwap: null,
+    // Shadow Werewolf's once-per-game power doubles that night's kill vote
+    // and obscures the FOLLOWING day's vote tally - set on the night it's
+    // used, consumed (and reset) when that next day-vote phase begins.
+    dayVoteObscured: false,
+    dayVoteObscuredNextRound: false
   };
 }
 
@@ -383,6 +427,13 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
     }
 
     fields.push(...exclusiveActionFields('wolfActionMode', "Choose Tonight's Action", [killChoice, specialChoice]));
+
+    // Shadow Werewolf's power augments the kill vote itself rather than
+    // competing with it, so it's an extra toggle alongside the vote, not
+    // part of the exclusive kill-vs-special choice above.
+    if (player.role === 'shadow_werewolf' && !player.usedOneTime && killAvailable) {
+      fields.push({ type: 'checkbox', id: 'shadowPowerCheck', label: 'Unleash Shadow Power (once per game)', description: "Doubles your kill vote tonight, and hides tomorrow's day-vote tally from everyone." });
+    }
 
     // With first-night immunity on, the pack has no kill vote to cast - if
     // this wolf also has no other independent action available (a plain
@@ -586,11 +637,16 @@ function applyNightSubmission(game, players, player, submission) {
 
     if (!modeOffered || mode === 'kill') {
       const voteVal = v('wolfIndividualVote');
+      const usingShadowPower = player.role === 'shadow_werewolf' && submission.shadowPowerCheck && !player.usedOneTime;
       if (voteVal) {
-        const weight = player.role === 'alpha_werewolf' ? 2 : 1;
+        const weight = (player.role === 'alpha_werewolf' || usingShadowPower) ? 2 : 1;
         game.nightWolfVotes[voteVal] = (game.nightWolfVotes[voteVal] || 0) + weight;
         const tgt = players.find(p => p.id === voteVal);
         game.wolfVoteHistory.push({ voterId: player.id, voterName: player.name, targetId: voteVal, targetName: tgt ? tgt.name : 'Unknown' });
+      }
+      if (usingShadowPower) {
+        player.usedOneTime = true;
+        game.dayVoteObscuredNextRound = true;
       }
     }
     if (!modeOffered || mode === 'special') {

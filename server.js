@@ -247,7 +247,8 @@ async function handleMessage(ws, msg) {
       room.players.set(id, {
         id, name, token, ws, role: null, lastExtra: null,
         pendingNightFields: null, pendingVoteOptions: null,
-        lastNightRecap: null, lastVoteRecap: null
+        lastNightRecap: null, lastVoteRecap: null,
+        pendingInspectRecap: []
       });
       ws.roomCode = room.code;
       ws.playerId = id;
@@ -350,6 +351,16 @@ async function handleMessage(ws, msg) {
       const players = Array.from(room.players.values());
       const result = engine.applyInspect(room.game, players, player, msg.inspectKind, msg.targetId, msg.targetId2);
       send(ws, { type: 'night:inspect-result', fieldId: msg.fieldId, result });
+      if (result) {
+        // Inspect fields never leave a trace in the submission itself (the
+        // result was already shown live), so without this the end-of-night
+        // recap would wrongly say "you didn't use an action tonight" even
+        // though inspecting IS the action for a Seer/Detective/etc.
+        const field = (player.pendingNightFields || []).find(f => f.id === msg.fieldId || (f.ids && f.ids[0] === msg.fieldId));
+        const label = field ? field.label : 'Inspected a player';
+        const targetName = result.name || [result.name1, result.name2].filter(Boolean).join(' & ');
+        player.pendingInspectRecap.push(targetName ? `${label}: ${targetName}` : label);
+      }
       break;
     }
 
@@ -365,7 +376,7 @@ async function handleMessage(ws, msg) {
       engine.applyNightSubmission(room.game, players, player, submission);
       room.game.submitted[player.id] = true;
 
-      player.lastNightRecap = engine.summarizeSubmission(player.pendingNightFields, submission);
+      player.lastNightRecap = [...player.pendingInspectRecap, ...engine.summarizeSubmission(player.pendingNightFields, submission)];
       send(ws, { type: 'night:ack', recapLines: player.lastNightRecap });
 
       if (engine.isWolf(player.role) && submission.wolfIndividualVote) {
@@ -479,6 +490,7 @@ function startNight(room) {
     const prompt = engine.buildNightPrompt(room.game, players, room.headhunterTargets, player);
     player.pendingNightFields = prompt.fields;
     player.lastNightRecap = null;
+    player.pendingInspectRecap = [];
     const passiveTimerSeconds = passiveTimerSecondsFor(room, prompt);
     // Tracked as an absolute deadline (not just the flat duration below) so
     // a reconnect mid-countdown reports the actual time left instead of
@@ -561,10 +573,11 @@ function broadcastWolfVoteUpdate(room) {
 
 // Same idea for the day vote - villagers should see who's voting for whom
 // as it happens, not just after everyone's locked in - unless the host has
-// the "Hide Live Vote Numbers" setting on for this game, in which case the
-// running tally stays concealed until the host reveals the result.
+// the "Hide Live Vote Numbers" setting on for this game, or a Shadow
+// Werewolf obscured today's vote specifically, in which case the running
+// tally stays concealed until the host reveals the result.
 function broadcastDayVoteUpdate(room) {
-  if (room.game.settings.hideVoteCounts) return;
+  if (room.game.settings.hideVoteCounts || room.game.dayVoteObscured) return;
   const players = Array.from(room.players.values());
   const pending = players.filter(p => p.alive && !room.game.submitted[p.id]);
   pending.forEach(p => {
@@ -635,6 +648,10 @@ function startVote(room) {
   room.game.dayVotes = {};
   room.game.dayVoteHistory = [];
   room.game.submitted = {};
+  // Consume a Shadow Werewolf's obscure-tomorrow's-vote power, if used the
+  // night before - applies to exactly this one day-vote, then clears.
+  room.game.dayVoteObscured = !!room.game.dayVoteObscuredNextRound;
+  room.game.dayVoteObscuredNextRound = false;
   const players = Array.from(room.players.values());
   const living = players.filter(p => p.alive);
   room.game.pendingVoters = living.map(p => p.id);

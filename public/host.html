@@ -57,6 +57,7 @@
             <button class="secondary" style="width:auto; padding:0.25rem 0.6rem; font-size:0.75rem; margin:0;" onclick="toggleAllRoles(false)">Disable All</button>
           </div>
         </div>
+        <p class="muted center" id="customTotalDisplay" style="display:none; margin-bottom:0.6rem;"></p>
         <div id="roleGrid" class="role-grid"></div>
       </div>
 
@@ -172,6 +173,15 @@
           <button id="exitSessionCancelBtn" class="secondary">Cancel</button>
           <button id="exitSessionConfirmBtn" class="danger">Exit &amp; End Session</button>
         </div>
+      </div>
+    </div>
+
+    <div id="roleInfoModal" class="modal">
+      <div class="modal-content">
+        <span id="roleInfoBadge" class="role-badge"></span>
+        <h3 id="roleInfoName" style="margin:0.5rem 0;"></h3>
+        <p id="roleInfoDesc" style="margin:0.75rem 0; line-height:1.5;"></p>
+        <button id="roleInfoCloseBtn" class="secondary">Close</button>
       </div>
     </div>
   </div>
@@ -316,6 +326,17 @@
       const enough = players.length >= 4;
       $('startBtn').disabled = !enough;
       $('startHint').textContent = enough ? '' : `Need at least 4 players to start (${players.length}/4).`;
+      updateCustomTotalDisplay();
+    }
+
+    function updateCustomTotalDisplay() {
+      const el = $('customTotalDisplay');
+      if (currentMode !== 'custom') { el.style.display = 'none'; return; }
+      const total = Object.values(customRoleCounts).reduce((a, b) => a + b, 0);
+      const need = players.length;
+      el.style.display = '';
+      el.textContent = `Roles selected: ${total} / ${need} player${need === 1 ? '' : 's'}`;
+      el.style.color = total > need ? 'var(--neon-wolf)' : (need > 0 && total === need ? 'var(--neon-safe)' : '');
     }
 
     window.kickPlayer = function (id) {
@@ -354,17 +375,32 @@
         return `
           <div class="role-card team-${r.team}">
             <div>
-              <strong>${r.name}</strong>
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:0.3rem;">
+                <strong>${r.name}</strong>
+                <button type="button" class="secondary" style="width:auto; padding:0 0.5rem; margin:0; font-size:0.8rem; line-height:1.5rem; border-radius:999px;" onclick="showRoleInfo('${key}')" title="What does this role do?">ⓘ</button>
+              </div>
               <span class="role-badge badge-${r.team}">${r.team}</span>
             </div>
             <div class="role-action-bar">${controls}</div>
           </div>
         `;
       }).join('');
+      updateCustomTotalDisplay();
     }
+
+    window.showRoleInfo = function (key) {
+      const r = ROLES[key];
+      $('roleInfoBadge').className = `role-badge badge-${r.team}`;
+      $('roleInfoBadge').textContent = `${r.team.toUpperCase()} TEAM`;
+      $('roleInfoName').textContent = r.name;
+      $('roleInfoDesc').textContent = r.desc;
+      $('roleInfoModal').classList.add('active');
+    };
+    $('roleInfoCloseBtn').addEventListener('click', () => $('roleInfoModal').classList.remove('active'));
 
     window.updateCustomCount = function (key, val) {
       customRoleCounts[key] = parseInt(val) || 0;
+      updateCustomTotalDisplay();
     };
 
     window.toggleRole = function (key) {
