@@ -213,6 +213,7 @@ function freshGameState(settings) {
     beastTrapped: null,
     activeTrap: null,
     asleepId: null,
+    pendingAsleepTarget: null,
     silencedId: null,
     pacifistRevealTarget: null,
     mayorRevealed: false,
@@ -275,7 +276,15 @@ function beginNight(game, players) {
   game.nightWolfVotes = {};
   game.wolfVoteHistory = [];
   game.pacifistRevealTarget = null;
-  game.asleepId = null;
+  // Nightmare Werewolf picks a sleep target one night, but it only takes
+  // effect starting the FOLLOWING night (their target's prompt for the
+  // night they were picked was already sent out before the pick happened,
+  // since all night actions submit simultaneously) - queued the same way
+  // as Naughty Boy's swap below. Quietly fizzles if the target has since
+  // died.
+  const pendingAsleep = game.pendingAsleepTarget;
+  game.pendingAsleepTarget = null;
+  game.asleepId = (pendingAsleep && (players || []).some(p => p.id === pendingAsleep && p.alive)) ? pendingAsleep : null;
   game.votingDisabledThisRound = false;
   game.nightActions = freshNightActions();
   game.submitted = {};
@@ -656,7 +665,9 @@ function applyNightSubmission(game, players, player, submission) {
       }
       if (v('nightmareTarget')) {
         game.nightActions.asleepTarget = v('nightmareTarget');
-        game.asleepId = game.nightActions.asleepTarget;
+        // Queued, not applied - beginNight() puts the target to sleep at
+        // the start of the FOLLOWING night.
+        game.pendingAsleepTarget = game.nightActions.asleepTarget;
         player.sleepCharges--;
       }
       if (v('juniorSelect')) {

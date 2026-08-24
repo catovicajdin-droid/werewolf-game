@@ -202,6 +202,24 @@
       customRoleCounts[k] = k === 'werewolf' ? 2 : (k === 'seer' || k === 'doctor' ? 1 : 0);
     });
 
+    // A dropped/backgrounded connection shouldn't cost the host their
+    // in-progress role setup - persisted per tab, restored below before the
+    // first render, and refreshed on every change.
+    const HOST_SETUP_KEY = 'werewolf_host_setup';
+    function saveHostSetup() {
+      try { sessionStorage.setItem(HOST_SETUP_KEY, JSON.stringify({ currentMode, roleToggles, customRoleCounts })); } catch { /* ignore */ }
+    }
+    (function restoreHostSetup() {
+      try {
+        const raw = sessionStorage.getItem(HOST_SETUP_KEY);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        if (saved.currentMode) currentMode = saved.currentMode;
+        if (saved.roleToggles) Object.assign(roleToggles, saved.roleToggles);
+        if (saved.customRoleCounts) Object.assign(customRoleCounts, saved.customRoleCounts);
+      } catch { /* ignore */ }
+    })();
+
     let players = [];
     let currentJoinUrl = '';
 
@@ -215,20 +233,24 @@
 
     let isReattach = false;
 
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+    let ws = null;
 
-    ws.addEventListener('open', () => {
-      const existing = loadHostRoom();
-      if (existing) {
-        isReattach = true;
-        ws.send(JSON.stringify({ type: 'host:reattach', code: existing }));
-      } else {
-        ws.send(JSON.stringify({ type: 'host:create' }));
-      }
-    });
+    function connect() {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      ws = new WebSocket(`${proto}://${location.host}/ws`);
 
-    ws.addEventListener('message', (ev) => {
+      ws.addEventListener('open', () => {
+        $('startHint').textContent = players.length >= 4 ? '' : (players.length ? `Need at least 4 players to start (${players.length}/4).` : '');
+        const existing = loadHostRoom();
+        if (existing) {
+          isReattach = true;
+          ws.send(JSON.stringify({ type: 'host:reattach', code: existing }));
+        } else {
+          ws.send(JSON.stringify({ type: 'host:create' }));
+        }
+      });
+
+      ws.addEventListener('message', (ev) => {
       const msg = JSON.parse(ev.data);
 
       if (msg.type === 'room:created') {
@@ -279,9 +301,21 @@
       }
     });
 
-    ws.addEventListener('close', () => {
-      $('startHint').textContent = 'Connection to the server was lost. Reload this page to create a new room.';
-    });
+      ws.addEventListener('close', () => {
+        // Try a silent reconnect first (phone likely just backgrounded the
+        // tab or lost signal briefly) - only fall back to asking for a
+        // manual reload if there's no room to even reattach to.
+        const existing = loadHostRoom();
+        if (existing) {
+          $('startHint').textContent = 'Connection lost - reconnecting...';
+          setTimeout(connect, 1500);
+        } else {
+          $('startHint').textContent = 'Connection to the server was lost. Reload this page to create a new room.';
+        }
+      });
+    }
+
+    connect();
 
     window.showAddressOption = function (opt) {
       currentJoinUrl = opt.joinUrl;
@@ -360,8 +394,20 @@
       renderRoleCards();
     }
 
+    function isRoleSelected(key) {
+      if (currentMode === 'custom') return (customRoleCounts[key] || 0) > 0;
+      if (currentMode === 'selected_random') return !!roleToggles[key];
+      return false; // full_random has no per-role selection to sort by
+    }
+
     function renderRoleCards() {
       const grid = $('roleGrid');
+      // Rendered in fixed (ROLES-definition) order always; visual grouping
+      // of selected roles to the top is done via CSS `order` (see
+      // updateRoleCardOrder) so that toggling one role's count/state never
+      // has to destroy and recreate every card's DOM nodes - that full
+      // rebuild was racing with rapid sequential input changes and
+      // corrupting in-flight custom counts.
       grid.innerHTML = Object.entries(ROLES).map(([key, r]) => {
         let controls = '';
         if (currentMode === 'custom') {
@@ -372,8 +418,9 @@
         } else {
           controls = `<span class="muted" style="font-size:0.75rem;">In Random Pool</span>`;
         }
+        const order = currentMode !== 'full_random' && isRoleSelected(key) ? 0 : 1;
         return `
-          <div class="role-card team-${r.team}">
+          <div class="role-card team-${r.team}" id="rolecard_${key}" style="order:${order};">
             <div>
               <div style="display:flex; align-items:center; justify-content:space-between; gap:0.3rem;">
                 <strong>${r.name}</strong>
@@ -386,6 +433,19 @@
         `;
       }).join('');
       updateCustomTotalDisplay();
+      saveHostSetup();
+    }
+
+    // Cheap repositioning used after a single role's count/toggle changes -
+    // only touches `style.order` on already-existing cards, never
+    // recreates the <input>/<button> DOM nodes, so it can't race with a
+    // caller sequentially filling multiple inputs in a loop.
+    function updateRoleCardOrder() {
+      Object.keys(ROLES).forEach(key => {
+        const card = document.getElementById('rolecard_' + key);
+        if (!card) return;
+        card.style.order = (currentMode !== 'full_random' && isRoleSelected(key)) ? 0 : 1;
+      });
     }
 
     window.showRoleInfo = function (key) {
@@ -400,16 +460,20 @@
 
     window.updateCustomCount = function (key, val) {
       customRoleCounts[key] = parseInt(val) || 0;
+      updateRoleCardOrder(); // reposition without rebuilding the grid's DOM
       updateCustomTotalDisplay();
+      saveHostSetup();
     };
 
     window.toggleRole = function (key) {
       roleToggles[key] = !roleToggles[key];
-      const btn = $(`toggle_btn_${key}`);
+      const btn = $('toggle_btn_' + key);
       if (btn) {
-        btn.className = `role-toggle-btn ${roleToggles[key] ? 'active' : ''}`;
+        btn.classList.toggle('active', roleToggles[key]);
         btn.textContent = roleToggles[key] ? 'ENABLED' : 'OFF';
       }
+      updateRoleCardOrder(); // reposition without rebuilding the grid's DOM
+      saveHostSetup();
     };
 
     window.toggleAllRoles = function (enable) {
