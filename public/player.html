@@ -318,6 +318,23 @@
         return sel;
       };
 
+      // Hides/shows a field's wrapper based on another field's current
+      // value - used for "pick at most one action" groups (a mode select
+      // plus each choice's own fields), shared across select/checkbox/
+      // inspect fields since any of them can be a dependent sub-field.
+      const wireDependsOn = (wrap, f) => {
+        if (!f.dependsOn) return;
+        const update = () => {
+          const c = document.getElementById(f.dependsOn.id);
+          wrap.style.display = (c && c.value === f.dependsOn.equals) ? '' : 'none';
+        };
+        setTimeout(() => {
+          const c = document.getElementById(f.dependsOn.id);
+          if (c) c.addEventListener('change', update);
+          update();
+        }, 0);
+      };
+
       fields.forEach(f => {
         const wrap = document.createElement('div');
         wrap.style.marginBottom = '0.6rem';
@@ -343,18 +360,7 @@
           wrap.appendChild(sel);
           container.appendChild(wrap);
           getters[f.id] = () => sel.value || null;
-
-          if (f.dependsOn) {
-            const update = () => {
-              const c = document.getElementById(f.dependsOn.id);
-              wrap.style.display = (c && c.value === f.dependsOn.equals) ? '' : 'none';
-            };
-            setTimeout(() => {
-              const c = document.getElementById(f.dependsOn.id);
-              if (c) c.addEventListener('change', update);
-              update();
-            }, 0);
-          }
+          wireDependsOn(wrap, f);
           return;
         }
 
@@ -372,6 +378,7 @@
           wrap.appendChild(label);
           container.appendChild(wrap);
           getters[f.id] = () => cb.checked;
+          wireDependsOn(wrap, f);
           return;
         }
 
@@ -400,18 +407,7 @@
           inspectResultEls[f.id] = resultDiv;
           inspectKindByField[f.id] = f.inspectKind;
           getters[f.id] = () => null;
-
-          if (f.dependsOn) {
-            const update = () => {
-              const c = document.getElementById(f.dependsOn.id);
-              wrap.style.display = (c && c.value === f.dependsOn.equals) ? '' : 'none';
-            };
-            setTimeout(() => {
-              const c = document.getElementById(f.dependsOn.id);
-              if (c) c.addEventListener('change', update);
-              update();
-            }, 0);
-          }
+          wireDependsOn(wrap, f);
           return;
         }
 

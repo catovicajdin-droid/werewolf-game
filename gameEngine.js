@@ -203,6 +203,9 @@ function freshGameState(settings) {
 function summarizeSubmission(fields, submission) {
   const lines = [];
   (fields || []).forEach(f => {
+    // The mode selector from exclusiveActionFields() is redundant in the
+    // recap - the field it reveals already summarizes the same choice.
+    if (f.skipRecap) return;
     if (f.type === 'select') {
       const val = submission[f.id];
       if (val) {
@@ -278,6 +281,32 @@ function buildExtraInfo(player, players, headhunterTargets, game) {
   return null;
 }
 
+// Builds a "pick at most one" set of fields for a role that has more than
+// one distinct power available the same night (e.g. a Wolf Seer's kill
+// vote vs. their inspect, or the Witch's heal vs. poison) - a mode select
+// plus each choice's own fields, shown only when that mode is picked, so
+// only one power can ever be exercised per night. With just one real
+// choice available, that choice's fields are returned bare with no mode
+// selector, preserving the plain single-action UI (e.g. an ordinary
+// Werewolf just sees the kill vote, no redundant "choose an action" step).
+function exclusiveActionFields(modeId, modeLabel, choices) {
+  const real = choices.filter(c => c);
+  if (real.length === 0) return [];
+  if (real.length === 1) return real[0].fields;
+
+  const fields = [{
+    type: 'select',
+    id: modeId,
+    label: modeLabel,
+    skipRecap: true, // the chosen action's own field already summarizes this
+    options: [{ value: '', label: 'Do nothing tonight' }, ...real.map(c => ({ value: c.value, label: c.label }))]
+  }];
+  real.forEach(c => {
+    c.fields.forEach(f => fields.push({ ...f, dependsOn: { id: modeId, equals: c.value } }));
+  });
+  return fields;
+}
+
 function buildNightPrompt(game, players, headhunterTargets, player) {
   const extra = buildExtraInfo(player, players, headhunterTargets, game);
 
@@ -294,23 +323,31 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
 
   if (isWolf(player.role)) {
     const nonWolves = living.filter(p => !isWolf(p.role));
+    const killAvailable = !(game.round === 1 && game.settings.firstNightImmunity);
 
-    if (game.round === 1 && game.settings.firstNightImmunity) {
+    if (!killAvailable) {
       fields.push({ type: 'info', text: 'First Night Kill Protection is ON. Werewolves cannot eliminate tonight.' });
     } else {
       // Always included (not just once someone's voted) - since votes are
       // simultaneous rather than turn-based, this panel is the live target
       // the client updates in place as teammates submit their kill vote,
-      // so it needs a stable anchor even while empty.
+      // so it needs a stable anchor even while empty. Shown regardless of
+      // which action this wolf ends up taking, so the pack can still see
+      // teammates' votes come in even while using their own special power.
       fields.push({
         type: 'info',
         id: 'wolfVoteHistoryPanel',
         label: '🐺 Pack Votes So Far',
         list: game.wolfVoteHistory.length ? game.wolfVoteHistory.map(v => `${v.voterName} voted for ${v.targetName}`) : ['No votes cast yet.']
       });
-      const voteCounts = {};
-      game.wolfVoteHistory.forEach(v => { voteCounts[v.targetId] = (voteCounts[v.targetId] || 0) + 1; });
-      fields.push({
+    }
+
+    const voteCounts = {};
+    game.wolfVoteHistory.forEach(v => { voteCounts[v.targetId] = (voteCounts[v.targetId] || 0) + 1; });
+    const killChoice = killAvailable ? {
+      value: 'kill',
+      label: 'Cast Your Individual Kill Vote',
+      fields: [{
         type: 'select',
         id: 'wolfIndividualVote',
         label: 'Cast Your Individual Kill Vote',
@@ -319,26 +356,33 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
           value: p.id,
           label: p.name + (voteCounts[p.id] ? ` [🐺 ${voteCounts[p.id]} vote${voteCounts[p.id] > 1 ? 's' : ''}]` : '')
         }))
-      });
+      }]
+    } : null;
+
+    let specialChoice = null;
+    if (player.role === 'kitten_wolf' && !player.usedOneTime) {
+      specialChoice = { value: 'special', label: 'Bite & Convert a Player to Werewolf', fields: [
+        { type: 'select', id: 'kittenBiteSelect', label: 'Kitten Wolf: Bite & Convert to Werewolf instead', placeholder: 'Select player...', options: nonWolves.map(opt) }
+      ] };
+    } else if (player.role === 'nightmare_werewolf' && player.sleepCharges > 0) {
+      specialChoice = { value: 'special', label: `Put a Player to Sleep (${player.sleepCharges} use${player.sleepCharges !== 1 ? 's' : ''} left)`, fields: [
+        { type: 'select', id: 'nightmareTarget', label: `Nightmare Werewolf: Put a player to sleep tonight (${player.sleepCharges} use${player.sleepCharges !== 1 ? 's' : ''} left)`, placeholder: 'Select player...', options: otherLiving.map(opt) }
+      ] };
+    } else if (player.role === 'wolf_seer') {
+      specialChoice = { value: 'special', label: "Uncover a Player's Exact Role", fields: [
+        { type: 'inspect', id: 'wolfSeerTarget', inspectKind: 'wolfseer', label: 'Wolf Seer: Uncover Exact Role', placeholder: 'Select player to uncover...', options: otherLiving.map(opt) }
+      ] };
+    } else if (player.role === 'sorcerer') {
+      specialChoice = { value: 'special', label: 'Check if a Player is Seer or Werewolf', fields: [
+        { type: 'inspect', id: 'sorcererTarget', inspectKind: 'sorcerer', label: 'Sorcerer: Check if Seer or Werewolf', placeholder: 'Select player to check...', options: otherLiving.map(opt) }
+      ] };
+    } else if (player.role === 'junior_werewolf') {
+      specialChoice = { value: 'special', label: 'Choose Your Revenge Target', fields: [
+        { type: 'select', id: 'juniorSelect', label: 'Junior Werewolf: Choose Revenge Target', placeholder: 'Select target to drag down if you die...', options: otherLiving.map(opt) }
+      ] };
     }
 
-    let hasWolfSpecialAction = false;
-    if (player.role === 'kitten_wolf' && !player.usedOneTime) {
-      fields.push({ type: 'select', id: 'kittenBiteSelect', label: 'Kitten Wolf: Bite & Convert to Werewolf instead', placeholder: 'Do not bite tonight', options: nonWolves.map(opt) });
-      hasWolfSpecialAction = true;
-    } else if (player.role === 'nightmare_werewolf' && player.sleepCharges > 0) {
-      fields.push({ type: 'select', id: 'nightmareTarget', label: `Nightmare Werewolf: Put a player to sleep tonight (${player.sleepCharges} use${player.sleepCharges !== 1 ? 's' : ''} left)`, placeholder: 'None (skip)', options: otherLiving.map(opt) });
-      hasWolfSpecialAction = true;
-    } else if (player.role === 'wolf_seer') {
-      fields.push({ type: 'inspect', id: 'wolfSeerTarget', inspectKind: 'wolfseer', label: 'Wolf Seer: Uncover Exact Role', placeholder: 'Select player to uncover...', options: otherLiving.map(opt) });
-      hasWolfSpecialAction = true;
-    } else if (player.role === 'sorcerer') {
-      fields.push({ type: 'inspect', id: 'sorcererTarget', inspectKind: 'sorcerer', label: 'Sorcerer: Check if Seer or Werewolf', placeholder: 'Select player to check...', options: otherLiving.map(opt) });
-      hasWolfSpecialAction = true;
-    } else if (player.role === 'junior_werewolf') {
-      fields.push({ type: 'select', id: 'juniorSelect', label: 'Junior Werewolf: Choose Revenge Target', placeholder: 'Select target to drag down if you die...', options: otherLiving.map(opt) });
-      hasWolfSpecialAction = true;
-    }
+    fields.push(...exclusiveActionFields('wolfActionMode', "Choose Tonight's Action", [killChoice, specialChoice]));
 
     // With first-night immunity on, the pack has no kill vote to cast - if
     // this wolf also has no other independent action available (a plain
@@ -346,7 +390,7 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
     // there is genuinely nothing to do, so mark them passive instead of
     // leaving them wrongly asked "are you sure you want to skip?" over an
     // action that was never on offer in the first place.
-    if (game.round === 1 && game.settings.firstNightImmunity && !hasWolfSpecialAction) {
+    if (!killChoice && !specialChoice) {
       passive = true;
     }
   } else if (player.role === 'pacifist' && !player.usedOneTime) {
@@ -394,12 +438,13 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
     }
   } else if (player.role === 'witch') {
     fields.push({ type: 'info', text: `Potions - Heal: ${game.witchHealUsed ? 'Used' : 'Available'} | Poison: ${game.witchPoisonUsed ? 'Used' : 'Available'}` });
-    if (!game.witchHealUsed) {
-      fields.push({ type: 'checkbox', id: 'witchHealVillageCheck', label: 'Use Heal Potion tonight', description: 'Shield the entire village from werewolf attacks for this turn.' });
-    }
-    if (!game.witchPoisonUsed) {
-      fields.push({ type: 'select', id: 'witchPoisonSelect', label: 'Poison a Player (Optional)', placeholder: 'Do not poison anyone', options: otherLiving.map(opt) });
-    }
+    const healChoice = !game.witchHealUsed ? { value: 'heal', label: 'Use Heal Potion (shield the village tonight)', fields: [
+      { type: 'checkbox', id: 'witchHealVillageCheck', label: 'Use Heal Potion tonight', description: 'Shield the entire village from werewolf attacks for this turn.' }
+    ] } : null;
+    const poisonChoice = !game.witchPoisonUsed ? { value: 'poison', label: 'Poison a Player', fields: [
+      { type: 'select', id: 'witchPoisonSelect', label: 'Poison a Player', placeholder: 'Select player...', options: otherLiving.map(opt) }
+    ] } : null;
+    fields.push(...exclusiveActionFields('witchMode', "Witch: Choose Tonight's Potion", [healChoice, poisonChoice]));
     if (game.witchHealUsed && game.witchPoisonUsed) {
       message = 'No potions remaining.';
       passive = true;
@@ -454,10 +499,13 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
     const curTarget = game.marksmanTargets[player.id];
     const curName = curTarget ? (players.find(p => p.id === curTarget) || {}).name : null;
     fields.push({ type: 'info', text: `Arrows: ${player.arrows} | Current Marked Target: ${curName || 'None'}` });
-    if (curTarget) {
-      fields.push({ type: 'checkbox', id: 'marksmanExecuteCheck', label: `Execute your marked target (${curName}) tonight`, description: "If they're innocent, you die instead." });
-    }
-    fields.push({ type: 'select', id: 'marksmanSelect', label: 'Mark a Different Target (executable on a future night)', placeholder: 'Keep current target', options: otherLiving.map(opt) });
+    const executeChoice = curTarget ? { value: 'execute', label: `Execute your marked target (${curName}) - if they're innocent, you die instead`, fields: [
+      { type: 'checkbox', id: 'marksmanExecuteCheck', label: `Execute your marked target (${curName}) tonight`, description: "If they're innocent, you die instead." }
+    ] } : null;
+    const markChoice = { value: 'mark', label: 'Mark a Different Target (executable on a future night)', fields: [
+      { type: 'select', id: 'marksmanSelect', label: 'Mark a Different Target', placeholder: curTarget ? 'Keep current target' : 'Select player...', options: otherLiving.map(opt) }
+    ] };
+    fields.push(...exclusiveActionFields('marksmanMode', "Marksman: Choose Tonight's Action", [executeChoice, markChoice]));
   } else if (player.role === 'gunner' && player.bullets > 0) {
     fields.push({ type: 'info', text: `Bullets remaining: ${player.bullets}` });
     fields.push({ type: 'select', id: 'gunnerShootSelect', label: 'Fire at a Player Tonight (Optional)', placeholder: 'Do not shoot tonight', options: otherLiving.map(opt) });
@@ -526,24 +574,38 @@ function applyNightSubmission(game, players, player, submission) {
   const v = (id) => submission[id] || null;
 
   if (isWolf(player.role)) {
-    const voteVal = v('wolfIndividualVote');
-    if (voteVal) {
-      const weight = player.role === 'alpha_werewolf' ? 2 : 1;
-      game.nightWolfVotes[voteVal] = (game.nightWolfVotes[voteVal] || 0) + weight;
-      const tgt = players.find(p => p.id === voteVal);
-      game.wolfVoteHistory.push({ voterId: player.id, voterName: player.name, targetId: voteVal, targetName: tgt ? tgt.name : 'Unknown' });
+    // wolfActionMode only exists in the submission when the player was
+    // actually offered a choice between the kill vote and a special power
+    // (both fields rendered, one hidden via dependsOn) - gate strictly on
+    // its value in that case so a stale selection left in the OTHER,
+    // hidden field can never sneak through as a second action. When the
+    // mode wasn't offered (only one power was available), fall back to the
+    // plain field check exactly as before.
+    const modeOffered = 'wolfActionMode' in submission;
+    const mode = submission.wolfActionMode;
+
+    if (!modeOffered || mode === 'kill') {
+      const voteVal = v('wolfIndividualVote');
+      if (voteVal) {
+        const weight = player.role === 'alpha_werewolf' ? 2 : 1;
+        game.nightWolfVotes[voteVal] = (game.nightWolfVotes[voteVal] || 0) + weight;
+        const tgt = players.find(p => p.id === voteVal);
+        game.wolfVoteHistory.push({ voterId: player.id, voterName: player.name, targetId: voteVal, targetName: tgt ? tgt.name : 'Unknown' });
+      }
     }
-    if (v('kittenBiteSelect')) {
-      game.nightActions.kittenBiteId = v('kittenBiteSelect');
-      player.usedOneTime = true;
-    }
-    if (v('nightmareTarget')) {
-      game.nightActions.asleepTarget = v('nightmareTarget');
-      game.asleepId = game.nightActions.asleepTarget;
-      player.sleepCharges--;
-    }
-    if (v('juniorSelect')) {
-      game.juniorTargets[player.id] = v('juniorSelect');
+    if (!modeOffered || mode === 'special') {
+      if (v('kittenBiteSelect')) {
+        game.nightActions.kittenBiteId = v('kittenBiteSelect');
+        player.usedOneTime = true;
+      }
+      if (v('nightmareTarget')) {
+        game.nightActions.asleepTarget = v('nightmareTarget');
+        game.asleepId = game.nightActions.asleepTarget;
+        player.sleepCharges--;
+      }
+      if (v('juniorSelect')) {
+        game.juniorTargets[player.id] = v('juniorSelect');
+      }
     }
   }
   if (v('pacifistTargetSelect')) {
@@ -565,13 +627,19 @@ function applyNightSubmission(game, players, player, submission) {
       game.bodyguardUsedTargets.push(game.nightActions.bodyguardId.targetId);
     }
   }
-  if (submission.witchHealVillageCheck) {
-    game.nightActions.witchHealUsedTurn = true;
-    game.witchHealUsed = true;
-  }
-  if (v('witchPoisonSelect')) {
-    game.nightActions.witchPoisonId = v('witchPoisonSelect');
-    game.witchPoisonUsed = true;
+  {
+    // Same mode-gating as wolves above - heal and poison are two separate
+    // one-time potions, but only one may be used per night.
+    const witchModeOffered = 'witchMode' in submission;
+    const witchMode = submission.witchMode;
+    if ((!witchModeOffered || witchMode === 'heal') && submission.witchHealVillageCheck) {
+      game.nightActions.witchHealUsedTurn = true;
+      game.witchHealUsed = true;
+    }
+    if ((!witchModeOffered || witchMode === 'poison') && v('witchPoisonSelect')) {
+      game.nightActions.witchPoisonId = v('witchPoisonSelect');
+      game.witchPoisonUsed = true;
+    }
   }
   if (v('priestSelect')) {
     game.nightActions.priestTarget = { priestId: player.id, targetId: v('priestSelect') };
@@ -629,12 +697,20 @@ function applyNightSubmission(game, players, player, submission) {
   if (v('beastTrapSelect')) {
     game.beastTrapped = v('beastTrapSelect');
   }
-  if (submission.marksmanExecuteCheck) {
-    game.nightActions.marksmanExecute = { marksmanId: player.id, targetId: game.marksmanTargets[player.id] };
-    player.arrows--;
-  }
-  if (v('marksmanSelect')) {
-    game.marksmanTargets[player.id] = v('marksmanSelect');
+  {
+    // Executing the current mark and picking a new one are mutually
+    // exclusive - marksmanMode only exists in the submission when both
+    // were actually offered (a target was already marked); with nothing
+    // marked yet, only the plain "mark a target" select is ever rendered.
+    const marksmanModeOffered = 'marksmanMode' in submission;
+    const marksmanMode = submission.marksmanMode;
+    if ((marksmanModeOffered ? marksmanMode === 'execute' : submission.marksmanExecuteCheck) && game.marksmanTargets[player.id]) {
+      game.nightActions.marksmanExecute = { marksmanId: player.id, targetId: game.marksmanTargets[player.id] };
+      player.arrows--;
+    }
+    if ((!marksmanModeOffered || marksmanMode === 'mark') && v('marksmanSelect')) {
+      game.marksmanTargets[player.id] = v('marksmanSelect');
+    }
   }
   if (v('gunnerShootSelect')) {
     game.nightActions.gunnerShot = { gunnerId: player.id, targetId: v('gunnerShootSelect') };
