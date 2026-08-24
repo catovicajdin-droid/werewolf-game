@@ -366,10 +366,23 @@ async function handleMessage(ws, msg) {
       if (!room || !room.game || room.phase !== 'night') return;
       const player = room.players.get(ws.playerId);
       if (!player || !player.alive) return;
+      // A reconnect/refresh re-renders the whole night prompt from scratch,
+      // which re-enables an inspect button that was already used and
+      // disabled client-side. That client-side lock isn't durable, so this
+      // is the actual guard: at most one successful inspect per player per
+      // night, no matter how many times the prompt gets resent.
+      if (player.usedInspectThisNight) {
+        send(ws, { type: 'night:inspect-result', fieldId: msg.fieldId, result: null, blocked: 'already-used' });
+        return;
+      }
       const players = Array.from(room.players.values());
       const result = engine.applyInspect(room.game, players, player, msg.inspectKind, msg.targetId, msg.targetId2);
       send(ws, { type: 'night:inspect-result', fieldId: msg.fieldId, result });
-      if (result) {
+      // A rejected duplicate pair (Detective re-trying two players they've
+      // already compared) doesn't count as using tonight's inspect - they
+      // should still be free to immediately try a different pair.
+      if (result && !result.alreadyUsedPair) {
+        player.usedInspectThisNight = true;
         // Inspect fields never leave a trace in the submission itself (the
         // result was already shown live), so without this the end-of-night
         // recap would wrongly say "you didn't use an action tonight" even
@@ -509,6 +522,7 @@ function startNight(room) {
     player.pendingNightFields = prompt.fields;
     player.lastNightRecap = null;
     player.pendingInspectRecap = [];
+    player.usedInspectThisNight = false;
     const passiveTimerSeconds = passiveTimerSecondsFor(room, prompt);
     // Tracked as an absolute deadline (not just the flat duration below) so
     // a reconnect mid-countdown reports the actual time left instead of

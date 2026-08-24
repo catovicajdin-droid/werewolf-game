@@ -160,6 +160,21 @@
       try { sessionStorage.removeItem(seatKey(roomCode)); } catch { /* ignore */ }
     }
 
+    // Tracks which night round this player has already tapped through the
+    // privacy gate for. In sessionStorage (not a plain JS variable) because
+    // a "refresh" isn't always just a WebSocket reconnect within the same
+    // page - a backgrounded mobile tab can get fully evicted and reloaded
+    // by the OS, wiping in-memory JS state but not sessionStorage. Either
+    // way, resyncing to the SAME round they already revealed shouldn't
+    // bounce them back to the gate.
+    function revealedRoundKey(roomCode) { return `werewolf_revealed_round_${roomCode}`; }
+    function loadRevealedRound(roomCode) {
+      try { return sessionStorage.getItem(revealedRoundKey(roomCode)); } catch { return null; }
+    }
+    function saveRevealedRound(roomCode, round) {
+      try { sessionStorage.setItem(revealedRoundKey(roomCode), String(round)); } catch { /* ignore */ }
+    }
+
     let ws = null;
     let myName = '';
     let myRoomCode = '';
@@ -226,7 +241,7 @@
         } else if (msg.type === 'night:prompt') {
           if (!iAmDead) renderNightPrompt(msg);
         } else if (msg.type === 'night:inspect-result') {
-          renderInspectResult(msg.fieldId, msg.result);
+          renderInspectResult(msg.fieldId, msg.result, msg.blocked);
         } else if (msg.type === 'night:wolf-vote-update') {
           renderWolfVoteUpdate(msg.wolfVoteHistory);
         } else if (msg.type === 'night:ack') {
@@ -287,6 +302,7 @@
     // gameEngine.js's buildNightPrompt() produces server-side. ----
     let inspectResultEls = {};
     let inspectKindByField = {};
+    let inspectControlsByField = {};
     let nightGetters = {};
     // Inspect actions resolve over a separate night:inspect round-trip, so
     // their getters always return null - track separately whether one fired
@@ -406,6 +422,7 @@
           container.appendChild(wrap);
           inspectResultEls[f.id] = resultDiv;
           inspectKindByField[f.id] = f.inspectKind;
+          inspectControlsByField[f.id] = { btn, sel };
           getters[f.id] = () => null;
           wireDependsOn(wrap, f);
           return;
@@ -439,6 +456,7 @@
           container.appendChild(wrap);
           inspectResultEls[f.ids[0]] = resultDiv;
           inspectKindByField[f.ids[0]] = f.inspectKind;
+          inspectControlsByField[f.ids[0]] = { btn, sel1, sel2 };
           getters[f.ids[0]] = () => null;
           getters[f.ids[1]] = () => null;
           return;
@@ -462,16 +480,40 @@
       return getters;
     }
 
-    function renderInspectResult(fieldId, result) {
+    function renderInspectResult(fieldId, result, blocked) {
       const el = inspectResultEls[fieldId];
+      if (!el) return;
+      if (blocked === 'already-used') {
+        // The prompt got re-rendered (reconnect/refresh) and re-enabled a
+        // control that was already used this night - the server refused
+        // the repeat, so say so instead of silently doing nothing.
+        el.innerHTML = `<div class="inspection-result-box muted">You've already used your inspect ability tonight.</div>`;
+        return;
+      }
+      if (result && result.alreadyUsedPair) {
+        el.innerHTML = `<div class="inspection-result-box muted">You've already compared ${result.name1} &amp; ${result.name2} - pick a different pair.</div>`;
+        const controls = inspectControlsByField[fieldId];
+        if (controls) {
+          controls.btn.disabled = false;
+          if (controls.sel) controls.sel.disabled = false;
+          if (controls.sel1) controls.sel1.disabled = false;
+          if (controls.sel2) controls.sel2.disabled = false;
+        }
+        return;
+      }
       const kind = inspectKindByField[fieldId];
-      if (!el || !result) return;
+      if (!result) return;
       if (kind === 'seer' || kind === 'wolfseer' || kind === 'vigilante') {
         el.innerHTML = `<div class="inspection-result-box"><div style="font-weight:700; margin-bottom:0.25rem;">${result.name} is: <span class="role-badge badge-${result.team}">${result.roleName}</span></div><div class="muted" style="font-size:0.8rem; line-height:1.4;">${result.desc}</div></div>`;
       } else if (kind === 'aura') {
         el.innerHTML = `<div class="inspection-result-box"><strong>${result.name}'s Aura:</strong> ${result.evil ? '<span class="role-badge badge-wolf">EVIL</span>' : '<span class="role-badge badge-village">GOOD</span>'}</div>`;
       } else if (kind === 'sorcerer') {
-        el.innerHTML = `<div class="inspection-result-box">${result.name} is ${result.match ? '<span class="role-badge badge-wolf">SEER OR WEREWOLF</span>' : '<span class="role-badge badge-village">NEITHER</span>'}</div>`;
+        // Deliberately ambiguous by design (that's the whole point of the
+        // check) - worded as a sentence rather than a single badge so it
+        // doesn't read like a specific role name was just revealed.
+        el.innerHTML = `<div class="inspection-result-box">${result.match
+          ? `<strong>${result.name}</strong> is <span class="role-badge badge-wolf">A MATCH</span> - they're either the Seer or on the Werewolf team (can't tell which).`
+          : `<strong>${result.name}</strong> is <span class="role-badge badge-village">NOT A MATCH</span> - not the Seer, not a Werewolf.`}</div>`;
       } else if (kind === 'detective') {
         el.innerHTML = `<div class="inspection-result-box">${result.name1} & ${result.name2} are ${result.same ? '<span class="role-badge badge-village">ON THE SAME TEAM</span>' : '<span class="role-badge badge-wolf">ON DIFFERENT TEAMS</span>'}</div>`;
       }
@@ -513,6 +555,7 @@
     function renderNightPrompt(msg) {
       inspectResultEls = {};
       inspectKindByField = {};
+      inspectControlsByField = {};
       currentNightPassive = !!msg.passive;
       anyInspectUsedThisPrompt = false;
 
@@ -563,11 +606,17 @@
         }
       };
 
-      // Fresh privacy gate every night - the prompt could have landed while
-      // the phone was face-up on a table.
-      $('nightGate').style.display = '';
-      $('nightContent').style.display = 'none';
+      // Fresh privacy gate for a genuinely new night - the prompt could have
+      // landed while the phone was face-up on a table. But if this is the
+      // SAME round they already tapped through (a reconnect/refresh just
+      // resyncing them mid-night), re-showing the gate would only interrupt
+      // them mid-action for no privacy benefit - they already revealed it
+      // once this night, so go straight to their action screen.
+      const alreadyRevealedThisRound = String(msg.round) === loadRevealedRound(myRoomCode);
+      $('nightGate').style.display = alreadyRevealedThisRound ? 'none' : '';
+      $('nightContent').style.display = alreadyRevealedThisRound ? '' : 'none';
       $('nightRevealBtn').onclick = () => {
+        saveRevealedRound(myRoomCode, msg.round);
         $('nightGate').style.display = 'none';
         $('nightContent').style.display = '';
       };

@@ -53,8 +53,11 @@
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
           <h3 style="margin:0;">🎭 Roles Setup</h3>
           <div style="display:flex; gap:0.35rem;">
-            <button class="secondary" style="width:auto; padding:0.25rem 0.6rem; font-size:0.75rem; margin:0;" onclick="toggleAllRoles(true)">Enable All</button>
-            <button class="secondary" style="width:auto; padding:0.25rem 0.6rem; font-size:0.75rem; margin:0;" onclick="toggleAllRoles(false)">Disable All</button>
+            <span id="toggleAllBtns" style="display:flex; gap:0.35rem;">
+              <button class="secondary" style="width:auto; padding:0.25rem 0.6rem; font-size:0.75rem; margin:0;" onclick="toggleAllRoles(true)">Enable All</button>
+              <button class="secondary" style="width:auto; padding:0.25rem 0.6rem; font-size:0.75rem; margin:0;" onclick="toggleAllRoles(false)">Disable All</button>
+            </span>
+            <button id="resetAllCountsBtn" class="secondary" style="width:auto; padding:0.25rem 0.6rem; font-size:0.75rem; margin:0; display:none;" onclick="resetAllCounts()">Set All to 0</button>
           </div>
         </div>
         <p class="muted center" id="customTotalDisplay" style="display:none; margin-bottom:0.6rem;"></p>
@@ -408,6 +411,8 @@
       } else {
         $('modeDesc').textContent = 'Set specific counts manually for each role.';
       }
+      $('toggleAllBtns').style.display = currentMode === 'selected_random' ? '' : 'none';
+      $('resetAllCountsBtn').style.display = currentMode === 'custom' ? '' : 'none';
       renderRoleCards();
     }
 
@@ -428,7 +433,14 @@
       grid.innerHTML = Object.entries(ROLES).map(([key, r]) => {
         let controls = '';
         if (currentMode === 'custom') {
-          controls = `<input type="number" id="role_count_${key}" value="${customRoleCounts[key] || 0}" min="0" max="10" onchange="updateCustomCount('${key}', this.value)" style="padding:0.3rem; margin:0; width:60px;">`;
+          const count = customRoleCounts[key] || 0;
+          controls = `
+            <div style="display:flex; align-items:center; gap:0.3rem; justify-content:center;">
+              <button type="button" class="secondary" id="stepdown_${key}" style="width:auto; padding:0.2rem 0.6rem; margin:0; font-size:1rem; line-height:1;" onclick="stepCustomCount('${key}', -1)" title="Decrease" ${count <= 0 ? 'disabled' : ''}>▼</button>
+              <input type="number" id="role_count_${key}" value="${count}" min="0" max="10" onchange="updateCustomCount('${key}', this.value)" style="padding:0.3rem; margin:0; width:42px; text-align:center;">
+              <button type="button" class="secondary" id="stepup_${key}" style="width:auto; padding:0.2rem 0.6rem; margin:0; font-size:1rem; line-height:1;" onclick="stepCustomCount('${key}', 1)" title="Increase" ${count >= 10 ? 'disabled' : ''}>▲</button>
+            </div>
+          `;
         } else if (currentMode === 'selected_random') {
           const active = roleToggles[key];
           controls = `<button class="role-toggle-btn ${active ? 'active' : ''}" id="toggle_btn_${key}" onclick="toggleRole('${key}')">${active ? 'ENABLED' : 'OFF'}</button>`;
@@ -476,11 +488,30 @@
     $('roleInfoCloseBtn').addEventListener('click', () => $('roleInfoModal').classList.remove('active'));
 
     window.updateCustomCount = function (key, val) {
-      customRoleCounts[key] = parseInt(val) || 0;
+      const clamped = Math.max(0, Math.min(10, parseInt(val) || 0));
+      customRoleCounts[key] = clamped;
+      const input = $('role_count_' + key);
+      if (input) input.value = clamped;
+      refreshStepperBounds(key);
       updateRoleCardOrder(); // reposition without rebuilding the grid's DOM
       updateCustomTotalDisplay();
       saveHostSetup();
     };
+
+    window.stepCustomCount = function (key, delta) {
+      window.updateCustomCount(key, (customRoleCounts[key] || 0) + delta);
+    };
+
+    // Enables/disables the ▲/▼ stepper buttons at the 0/10 bounds, without
+    // touching anything else in the card - same "only patch what changed"
+    // approach as updateRoleCardOrder, to stay safe under rapid clicking.
+    function refreshStepperBounds(key) {
+      const count = customRoleCounts[key] || 0;
+      const down = $('stepdown_' + key);
+      const up = $('stepup_' + key);
+      if (down) down.disabled = count <= 0;
+      if (up) up.disabled = count >= 10;
+    }
 
     window.toggleRole = function (key) {
       roleToggles[key] = !roleToggles[key];
@@ -495,6 +526,11 @@
 
     window.toggleAllRoles = function (enable) {
       Object.keys(ROLES).forEach(k => roleToggles[k] = enable);
+      renderRoleCards();
+    };
+
+    window.resetAllCounts = function () {
+      Object.keys(ROLES).forEach(k => customRoleCounts[k] = 0);
       renderRoleCards();
     };
 

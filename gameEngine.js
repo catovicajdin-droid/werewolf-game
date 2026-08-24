@@ -15,7 +15,14 @@ const crypto = require('crypto');
 const ROLES = require('./public/shared/roles.js');
 
 function isWolf(role) {
-  return !!(ROLES[role] && ROLES[role].team === 'wolf');
+  // Cursed Human is nominally team 'wolf' (so role-dependency/balance checks
+  // that key off ROLES[...].team directly still see them as wolf-aligned),
+  // but they're only a Villager in practice - no kill vote, no wolfpack
+  // awareness, doesn't count toward the wolf side of checkWin - until an
+  // actual werewolf attack converts them, which rewrites their role to a
+  // real 'werewolf' string (see resolveNight's cursed_human branch). So
+  // isWolf() must say false for them right up until that conversion.
+  return !!(ROLES[role] && ROLES[role].team === 'wolf' && role !== 'cursed_human');
 }
 
 function isEvil(role) {
@@ -175,6 +182,13 @@ function initPlayerRuntime(p) {
   // shouldn't lock the other out on a later night.
   p.vigilanteBulletUsed = false;
   p.vigilanteInspectUsed = false;
+  // Guards against reconnect/refresh letting a player re-fire their live
+  // inspect (Seer/Detective/Sorcerer/Aura Seer/Wolf Seer/Vigilante) a
+  // second time in the same night - inspects resolve immediately and
+  // independently of final submission, so unlike the rest of a night
+  // action they aren't naturally protected by the "already submitted"
+  // check. Reset at the start of every night in startNight().
+  p.usedInspectThisNight = false;
 }
 
 function freshNightActions() {
@@ -232,6 +246,7 @@ function freshGameState(settings) {
     bodyguardUsedTargets: [],
     grandmaUsedTargets: [],
     redLadyUsedTargets: [],
+    detectiveUsedPairs: [],
     pendingNaughtySwap: null,
     // Shadow Werewolf's once-per-game power doubles that night's kill vote
     // and obscures the FOLLOWING day's vote tally - set on the night it's
@@ -621,6 +636,11 @@ function applyInspect(game, players, player, inspectKind, targetId, targetId2) {
     const t1 = players.find(p => p.id === targetId);
     const t2 = players.find(p => p.id === targetId2);
     if (!t1 || !t2 || t1.id === t2.id) return null;
+    const pairKey = [t1.id, t2.id].sort().join('|');
+    if (game.detectiveUsedPairs.includes(pairKey)) {
+      return { alreadyUsedPair: true, name1: t1.name, name2: t2.name };
+    }
+    game.detectiveUsedPairs.push(pairKey);
     const team1 = ROLES[t1.role].team, team2 = ROLES[t2.role].team;
     const same = team1 === team2 && (team1 !== 'solo' || t1.role === t2.role);
     return { name1: t1.name, name2: t2.name, same };
