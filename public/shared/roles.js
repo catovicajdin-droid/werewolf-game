@@ -42,7 +42,7 @@
     lone_wolf: { name: 'Lone wolf', team: 'wolf', stackable: false, desc: 'Regular werewolf, but only wins if they are the last surviving werewolf.' },
     cursed_human: { name: 'Cursed Human', team: 'wolf', stackable: false, desc: 'Villager until attacked by werewolves, then converts into a full werewolf.' },
     kitten_wolf: { name: 'Kitten wolf', team: 'wolf', stackable: false, desc: 'Once per game, can bite a player to convert them into a werewolf instead of killing.' },
-    sorcerer: { name: 'Sorcerer', team: 'wolf', stackable: false, desc: 'Each night, checks one player to see if they are the Seer or a Werewolf.' },
+    sorcerer: { name: 'Sorcerer', team: 'wolf', stackable: false, desc: 'Each night, checks one player to confirm whether they are the Seer.' },
     wolf_seer: { name: 'Wolf seer', team: 'wolf', stackable: false, desc: 'Each night discovers exact role of a player. Becomes regular wolf if last wolf alive.' },
     alpha_werewolf: { name: 'Alpha Werewolf', team: 'wolf', stackable: false, desc: 'Regular werewolf whose vote counts as 2 during night selection.' },
     shadow_werewolf: { name: 'Shadow Werewolf', team: 'wolf', stackable: false, desc: 'Once per game, doubles wolf votes and obscures votes during daytime.' },

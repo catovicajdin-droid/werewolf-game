@@ -511,12 +511,13 @@
       } else if (kind === 'aura') {
         el.innerHTML = `<div class="inspection-result-box"><strong>${result.name}'s Aura:</strong> ${result.evil ? '<span class="role-badge badge-wolf">EVIL</span>' : '<span class="role-badge badge-village">GOOD</span>'}</div>`;
       } else if (kind === 'sorcerer') {
-        // Deliberately ambiguous by design (that's the whole point of the
-        // check) - worded as a sentence rather than a single badge so it
-        // doesn't read like a specific role name was just revealed.
-        el.innerHTML = `<div class="inspection-result-box">${result.match
-          ? `<strong>${result.name}</strong> is <span class="role-badge badge-wolf">A MATCH</span> - they're either the Seer or on the Werewolf team (can't tell which).`
-          : `<strong>${result.name}</strong> is <span class="role-badge badge-village">NOT A MATCH</span> - not the Seer, not a Werewolf.`}</div>`;
+        // A direct yes/no on whether the target is the Seer - checking for
+        // wolf-team membership was dropped since a Sorcerer already knows
+        // their fellow wolves via wolfpack awareness, making that half of
+        // the old ambiguous check pointless.
+        el.innerHTML = `<div class="inspection-result-box">${result.isSeer
+          ? `<strong>${result.name}</strong> <span class="role-badge badge-wolf">IS THE SEER</span>`
+          : `<strong>${result.name}</strong> <span class="role-badge badge-village">IS NOT THE SEER</span>`}</div>`;
       } else if (kind === 'detective') {
         el.innerHTML = `<div class="inspection-result-box">${result.name1} & ${result.name2} are ${result.same ? '<span class="role-badge badge-village">ON THE SAME TEAM</span>' : '<span class="role-badge badge-wolf">ON DIFFERENT TEAMS</span>'}</div>`;
       }

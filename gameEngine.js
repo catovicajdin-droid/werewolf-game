@@ -490,8 +490,8 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
         { type: 'inspect', id: 'wolfSeerTarget', inspectKind: 'wolfseer', label: 'Wolf Seer: Uncover Exact Role', placeholder: 'Select player to uncover...', options: otherLiving.map(opt) }
       ] };
     } else if (player.role === 'sorcerer') {
-      specialChoice = { value: 'special', label: 'Check if a Player is Seer or Werewolf', fields: [
-        { type: 'inspect', id: 'sorcererTarget', inspectKind: 'sorcerer', label: 'Sorcerer: Check if Seer or Werewolf', placeholder: 'Select player to check...', options: otherLiving.map(opt) }
+      specialChoice = { value: 'special', label: 'Check if a Player is the Seer', fields: [
+        { type: 'inspect', id: 'sorcererTarget', inspectKind: 'sorcerer', label: 'Sorcerer: Check if This Player is the Seer', placeholder: 'Select player to check...', options: otherLiving.map(opt) }
       ] };
     } else if (player.role === 'junior_werewolf') {
       specialChoice = { value: 'special', label: 'Choose Your Revenge Target', fields: [
@@ -702,9 +702,14 @@ function applyInspect(game, players, player, inspectKind, targetId, targetId2) {
     return { name: tgt.name, evil: isEvil(tgt.role) };
   }
   if (inspectKind === 'sorcerer') {
+    // A clear yes/no on "is this the Seer" - the ambiguous "Seer or
+    // Werewolf" match was dropped because checking for wolf-team
+    // membership tells a Sorcerer nothing they don't already know (they
+    // already see their fellow wolves via wolfpack awareness). The Seer
+    // is the only genuinely secret thing worth checking for.
     const tgt = players.find(p => p.id === targetId);
     if (!tgt) return null;
-    return { name: tgt.name, match: isWolf(tgt.role) || tgt.role === 'seer' };
+    return { name: tgt.name, isSeer: tgt.role === 'seer' };
   }
   if (inspectKind === 'detective') {
     const t1 = players.find(p => p.id === targetId);
