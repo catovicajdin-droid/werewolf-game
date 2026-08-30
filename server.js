@@ -733,7 +733,7 @@ function advanceRoundOrEnd(room) {
 function endGame(room, message) {
   room.phase = 'game-over';
   const players = Array.from(room.players.values());
-  const payload = { type: 'game:over', message, finalRoles: engine.buildFinalRoles(players) };
+  const payload = { type: 'game:over', message, finalRoles: engine.buildFinalRoles(players, room.game) };
   room.lastGameOver = payload;
   send(room.hostWs, payload);
   room.players.forEach(p => send(p.ws, payload));

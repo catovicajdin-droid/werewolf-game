@@ -644,7 +644,7 @@
       $('hostGameOverText').textContent = msg.message;
       $('hostFinalRolesList').innerHTML = msg.finalRoles.map(p => `
         <div style="padding:0.5rem 0; border-bottom:1px solid rgba(255,255,255,0.08); font-size:0.9rem;">
-          <div><strong>${p.name}</strong>: <span class="role-badge badge-${p.team}">${p.roleName}</span> ${p.alive ? '<span style="color:var(--neon-safe); font-weight:700;">🟢 Survived</span>' : '<span style="color:var(--neon-wolf); font-weight:700;">🔴 Eliminated</span>'}</div>
+          <div><strong>${p.name}</strong>: <span class="role-badge badge-${p.team}">${p.roleName}</span> ${p.convertedToSect ? '<span style="display:inline-block; padding:0.25rem 0.55rem; border-radius:999px; font-size:0.7rem; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2);" title="Converted to the Sect Leader\'s sect">🩸 Converted</span> ' : ''}${p.alive ? '<span style="color:var(--neon-safe); font-weight:700;">🟢 Survived</span>' : '<span style="color:var(--neon-wolf); font-weight:700;">🔴 Eliminated</span>'}</div>
           ${!p.alive && p.deathReason ? `<div class="muted" style="font-size:0.75rem; margin-top:0.2rem;">Cause of Death: <em>${p.deathReason}</em></div>` : ''}
         </div>
       `).join('');

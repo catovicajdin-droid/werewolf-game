@@ -892,7 +892,13 @@ function checkWin(game, players) {
   if (game.lovers && alive.length === 2 && alive.every(p => game.lovers.includes(p.id))) {
     return '❤️ The Lovers survived to the end and win together!';
   }
-  if (game.sect.length && alive.every(p => game.sect.includes(p.id) || p.role === 'sect_leader')) {
+  // Requires the Sect Leader to still be ALIVE, same as the Lovers win
+  // just above requiring both of them alive - without this check, a dead
+  // Sect Leader whose converts happened to be the only players left alive
+  // would still trigger this win, crediting a "Sect Leader" win to a
+  // player who was already eliminated.
+  const sectLeaderAlive = alive.some(p => p.role === 'sect_leader');
+  if (game.sect.length && sectLeaderAlive && alive.every(p => game.sect.includes(p.id) || p.role === 'sect_leader')) {
     return 'The Sect Leader and their Sect have converted everyone and win!';
   }
   if (alive.length === 1 && solos === 1) {
@@ -1104,13 +1110,19 @@ function resolveVotes(game, players, headhunterTargets) {
   return result;
 }
 
-function buildFinalRoles(players) {
+function buildFinalRoles(players, game) {
+  // Sect conversion (unlike Kitten Wolf's bite or Cursed Human's attack
+  // conversion) never rewrites the player's actual `role` - it's tracked
+  // separately in game.sect - so without this flag the final reveal would
+  // just show their original role with no sign they'd been converted.
+  const sect = game && game.sect ? game.sect : [];
   return players.map(p => ({
     name: p.name,
     roleName: ROLES[p.role].name,
     team: ROLES[p.role].team,
     alive: p.alive,
-    deathReason: p.deathReason
+    deathReason: p.deathReason,
+    convertedToSect: sect.includes(p.id)
   }));
 }
 
