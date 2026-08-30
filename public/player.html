@@ -263,6 +263,20 @@
           renderProgressList('voteProgressList', msg.players);
         } else if (msg.type === 'game:over') {
           renderGameOver(msg);
+        } else if (msg.type === 'game:reset') {
+          // The host started a new game in the SAME room - reset every bit
+          // of per-game client state so a subsequent role:assign is treated
+          // as fresh (it's only auto-switched to screen-waiting when
+          // haveRole was false) instead of silently updating in the
+          // background while this tab is still stuck on the old
+          // game-over/eliminated screen.
+          haveRole = false;
+          iAmDead = false;
+          currentRoleInfo = null;
+          clearInterval(dayTimerInterval);
+          clearInterval(passiveTimerInterval);
+          $('waitingStatusText').textContent = "You're in! Waiting for the host to start the game.";
+          switchScreen('screen-waiting');
         } else if (msg.type === 'room:kicked') {
           clearSeat(myRoomCode);
           if (msg.reason === 'seat-reclaimed') {

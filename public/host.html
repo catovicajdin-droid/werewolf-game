@@ -165,6 +165,8 @@
       <div class="card center">
         <div class="big" id="hostGameOverText" style="margin-bottom:1rem; color:var(--neon-solo); text-shadow:0 0 20px var(--neon-solo-glow);"></div>
         <div id="hostFinalRolesList" style="text-align:left; margin:1rem 0;"></div>
+        <button id="playAgainBtn" class="purple big" style="margin-top:1rem; padding:0.9rem;">🔁 Play Again (Same Room)</button>
+        <p class="muted" style="font-size:0.8rem; margin-top:0.5rem;">Keeps everyone connected and your role setup - no re-scanning the QR code. Roles are reshuffled from the same pool.</p>
       </div>
     </div>
 
@@ -301,6 +303,9 @@
         renderHostDayResult(msg);
       } else if (msg.type === 'game:over') {
         renderHostGameOver(msg);
+      } else if (msg.type === 'game:reset') {
+        clearInterval(hostDayTimerInterval);
+        switchScreen('screen-lobby');
       }
     });
 
@@ -336,6 +341,10 @@
       } catch {
         alert('Could not copy automatically - long-press or select the link text above to copy it manually.');
       }
+    });
+
+    $('playAgainBtn').addEventListener('click', () => {
+      ws.send(JSON.stringify({ type: 'host:play-again' }));
     });
 
     $('exitSessionBtn').addEventListener('click', () => {

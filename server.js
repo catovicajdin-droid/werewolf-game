@@ -324,6 +324,40 @@ async function handleMessage(ws, msg) {
       break;
     }
 
+    case 'host:play-again': {
+      const room = rooms.get(ws.roomCode);
+      if (!room || !ws.isHost) return;
+      // Only from the terminal game-over state - host:start itself has no
+      // phase check and already fully resets a game when called again, so
+      // this handler's job is just getting everyone's CLIENT back to a
+      // sane pre-game screen first, using the same room and players
+      // (no new room code, no re-scanning the QR).
+      if (room.phase !== 'game-over') return;
+
+      room.phase = 'lobby';
+      room.game = null;
+      room.headhunterTargets = {};
+      room.lastMorningReport = null;
+      room.dayBeginStatic = null;
+      room.dayDiscussionDeadline = null;
+      room.lastDayResult = null;
+      room.lastGameOver = null;
+      room.players.forEach(p => {
+        // Clearing role (not just runtime) matters here: sendPlayerCurrentState
+        // treats "no role" as "game hasn't started yet" and no-ops, which is
+        // exactly what a reconnect during this lobby gap should do - leaving
+        // the old role in place would have it try to resend stale game state.
+        p.role = null;
+        engine.initPlayerRuntime(p);
+      });
+
+      const payload = { type: 'game:reset' };
+      send(room.hostWs, payload);
+      room.players.forEach(p => send(p.ws, payload));
+      broadcastRoster(room);
+      break;
+    }
+
     case 'host:start': {
       const room = rooms.get(ws.roomCode);
       if (!room || !ws.isHost) return;
