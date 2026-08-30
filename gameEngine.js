@@ -37,6 +37,15 @@ function shuffle(arr) {
   return arr;
 }
 
+// Used by both random assignment modes for both Werewolves and Solos: caps
+// out at 1 per 5 players, then rolls a random count anywhere from 0 up to
+// that cap (inclusive) - so, unlike a fixed formula, a given player count
+// doesn't always produce the same number of wolves/solos game to game.
+function randomCountUpToMax(total) {
+  const max = Math.floor(total / 5);
+  return crypto.randomInt(max + 1);
+}
+
 // Mirrors sanitizeRoleDependencies() in index.html.
 function sanitizeRoleDependencies(rolesList, total) {
   let roles = [...rolesList];
@@ -117,15 +126,24 @@ function computeRoles(total, config) {
       throw new Error('Assigned roles exceed total players.');
     }
   } else if (assignmentMode === 'full_random') {
-    const wolfCount = Math.max(1, Math.floor(total / 3.5));
-    roles.push('werewolf');
-    const wolfKeys = Object.keys(ROLES).filter(k => ROLES[k].team === 'wolf' && k !== 'werewolf');
-    shuffle(wolfKeys);
-    for (let i = 1; i < wolfCount; i++) roles.push(wolfKeys[i % wolfKeys.length]);
+    const wolfCount = randomCountUpToMax(total);
+    if (wolfCount > 0) {
+      roles.push('werewolf');
+      const wolfKeys = Object.keys(ROLES).filter(k => ROLES[k].team === 'wolf' && k !== 'werewolf');
+      shuffle(wolfKeys);
+      for (let i = 1; i < wolfCount; i++) roles.push(wolfKeys[i % wolfKeys.length]);
+    }
 
-    const specialKeys = Object.keys(ROLES).filter(k => ROLES[k].team !== 'wolf' && k !== 'villager');
+    const soloCount = randomCountUpToMax(total);
+    const soloKeys = Object.keys(ROLES).filter(k => ROLES[k].team === 'solo');
+    shuffle(soloKeys);
+    for (let i = 0; i < soloCount && i < soloKeys.length && roles.length < total; i++) {
+      roles.push(soloKeys[i]);
+    }
+
+    const specialKeys = Object.keys(ROLES).filter(k => ROLES[k].team !== 'wolf' && ROLES[k].team !== 'solo' && k !== 'villager');
     shuffle(specialKeys);
-    for (let i = 0; i < total - wolfCount && i < specialKeys.length; i++) {
+    for (let i = 0; i < total - roles.length && i < specialKeys.length; i++) {
       if (Math.random() > 0.3) roles.push(specialKeys[i]);
     }
     roles = sanitizeRoleDependencies(roles, total);
@@ -134,9 +152,10 @@ function computeRoles(total, config) {
     if (!enabledKeys.length) throw new Error('No roles are enabled.');
 
     const enabledWolves = enabledKeys.filter(k => ROLES[k].team === 'wolf');
-    const enabledNonWolves = enabledKeys.filter(k => ROLES[k].team !== 'wolf' && k !== 'villager');
+    const enabledSolos = enabledKeys.filter(k => ROLES[k].team === 'solo');
+    const enabledSpecial = enabledKeys.filter(k => ROLES[k].team !== 'wolf' && ROLES[k].team !== 'solo' && k !== 'villager');
 
-    const targetWolves = Math.max(1, Math.floor(total / 3.5));
+    const targetWolves = randomCountUpToMax(total);
     for (let i = 0; i < targetWolves; i++) {
       if (enabledWolves.length > 0) {
         roles.push(enabledWolves[Math.floor(Math.random() * enabledWolves.length)]);
@@ -145,8 +164,20 @@ function computeRoles(total, config) {
       }
     }
 
-    shuffle(enabledNonWolves);
-    enabledNonWolves.forEach(k => {
+    // Unlike wolves above, no fallback here - if the host hasn't enabled
+    // any Solo-team role, there just aren't any this game, however the
+    // random roll comes out (Solos aren't a "there must be an antagonist"
+    // guarantee the way Werewolves are).
+    if (enabledSolos.length > 0) {
+      const targetSolos = randomCountUpToMax(total);
+      shuffle(enabledSolos);
+      for (let i = 0; i < targetSolos && i < enabledSolos.length && roles.length < total; i++) {
+        roles.push(enabledSolos[i]);
+      }
+    }
+
+    shuffle(enabledSpecial);
+    enabledSpecial.forEach(k => {
       if (roles.length >= total) return;
       if (k === 'seer_apprentice' && !roleToggles['seer']) return;
       if (k === 'sect_hunter' && !roleToggles['sect_leader']) return;
