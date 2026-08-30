@@ -635,11 +635,11 @@
       };
 
       // Passive Role Buffer Timer: a player with nothing to do would submit
-      // instantly, and since night:progress broadcasts submission status to
-      // everyone live, that speed alone can tip others off that they're
-      // passive - hold the button for a few seconds so a quick pass isn't
-      // a tell. Only the host's "Passive Role Buffer Timer" setting enables
-      // this (passiveTimerSeconds is 0 otherwise).
+      // instantly - hold the button for a few seconds so a quick pass isn't
+      // an obvious tell to anyone watching over their shoulder (submission
+      // status is host-only now, but this is still worth keeping as a
+      // second layer of protection). Only the host's "Passive Role Buffer
+      // Timer" setting enables this (passiveTimerSeconds is 0 otherwise).
       clearInterval(passiveTimerInterval);
       const btn = $('nightSubmitBtn');
       const defaultLabel = '✅ Confirm Action';

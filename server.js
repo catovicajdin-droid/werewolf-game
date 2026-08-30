@@ -546,9 +546,8 @@ function startNight(room) {
 }
 
 // A passive player (nothing to do this night) would otherwise submit
-// instantly, and since night:progress broadcasts who's submitted to every
-// player in real time, that speed alone can tip others off that they're
-// passive - the "Passive Role Buffer Timer" setting enforces a short wait
+// instantly, which can be an obvious tell to anyone glancing at their
+// screen - the "Passive Role Buffer Timer" setting enforces a short wait
 // before the client will let them confirm, so a quick pass isn't a tell.
 function passiveTimerSecondsFor(room, prompt) {
   return (prompt.passive && room.game.settings.passiveTimerToggle) ? 7 : 0;
@@ -585,11 +584,14 @@ function buildProgressPayload(room) {
   };
 }
 
+// Host-only: who's still pending and who's submitted used to be broadcast
+// to every player too, but that let players infer things (who's fast/slow,
+// who's likely passive) they shouldn't have visibility into. Only the host
+// needs this to know when to move the game along.
 function broadcastNightProgress(room) {
   if (!room.game) return;
   const payload = buildProgressPayload(room);
   send(room.hostWs, payload);
-  room.players.forEach(p => send(p.ws, payload));
 }
 
 // Sends the live "who's voting for whom" panel to wolves who haven't
