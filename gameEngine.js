@@ -235,6 +235,12 @@ function freshGameState(settings) {
     witchHealUsed: false,
     witchPoisonUsed: false,
     seenBySeer: {},
+    // Parallel to seenBySeer (which only tracks target IDs, for eligibility
+    // filtering) - keeps what was actually found for each target, so the
+    // Seer's own past results can be redisplayed to them as a running
+    // notebook. No new privacy leak: it's only ever shown back to the same
+    // Seer who already saw each result live at inspect time.
+    seerNotebook: {},
     graveRobberTargets: {},
     avengerTargets: {},
     juniorTargets: {},
@@ -485,6 +491,10 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
       fields.push({ type: 'info', text: '🔮 The true Seer has fallen! You have taken the mantle of the Seer.' });
     }
     const seen = game.seenBySeer[player.id] || [];
+    const notebook = game.seerNotebook[player.id] || [];
+    if (notebook.length) {
+      fields.push({ type: 'info', text: `Investigated so far: ${notebook.map(n => `${n.name} (${n.roleName})`).join(', ')}` });
+    }
     const eligible = otherLiving.filter(p => !seen.includes(p.id));
     if (eligible.length > 0) {
       fields.push({ type: 'inspect', id: 'seerSelect', inspectKind: 'seer', label: "Investigate a Player's Exact Secret Role", placeholder: 'Select player...', options: eligible.map(opt) });
@@ -499,8 +509,15 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
   } else if (player.role === 'aura_seer') {
     fields.push({ type: 'inspect', id: 'auraSelect', inspectKind: 'aura', label: 'Inspect Player Aura (Good vs Evil)', placeholder: 'Select player...', options: otherLiving.map(opt) });
   } else if (player.role === 'detective') {
+    if (game.detectiveUsedPairs.length) {
+      fields.push({ type: 'info', text: `Compared so far: ${game.detectiveUsedPairs.map(p => `${p.name1} & ${p.name2} (${p.same ? 'Same Team' : 'Different Teams'})`).join('; ')}` });
+    }
     fields.push({ type: 'inspect-pair', ids: ['det1', 'det2'], inspectKind: 'detective', label: 'Compare Team of Two Players', placeholders: ['Player 1...', 'Player 2...'], options: otherLiving.map(opt) });
   } else if (player.role === 'doctor') {
+    const doctorUsedNames = players.filter(p => game.doctorUsedTargets.includes(p.id)).map(p => p.name);
+    if (doctorUsedNames.length) {
+      fields.push({ type: 'info', text: `Already protected: ${doctorUsedNames.join(', ')}` });
+    }
     const eligible = living.filter(p => !game.doctorUsedTargets.includes(p.id));
     if (eligible.length > 0) {
       fields.push({ type: 'select', id: 'doctorProtectSelect', label: 'Select a Player to Protect Tonight (each player can only be protected once per game)', placeholder: 'Select player...', options: eligible.map(opt) });
@@ -509,6 +526,10 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
       passive = true;
     }
   } else if (player.role === 'bodyguard') {
+    const bodyguardUsedNames = players.filter(p => game.bodyguardUsedTargets.includes(p.id)).map(p => p.name);
+    if (bodyguardUsedNames.length) {
+      fields.push({ type: 'info', text: `Already guarded: ${bodyguardUsedNames.join(', ')}` });
+    }
     const eligible = otherLiving.filter(p => !game.bodyguardUsedTargets.includes(p.id));
     if (eligible.length > 0) {
       fields.push({ type: 'select', id: 'bodyguardProtectSelect', label: 'Select a Player to Bodyguard (each player can only be guarded once per game; you die in their place if attacked)', placeholder: 'Select player...', options: eligible.map(opt) });
@@ -556,6 +577,10 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
   } else if (player.role === 'cupid' && game.round === 1 && !game.lovers) {
     fields.push({ type: 'select-pair', ids: ['cupidLover1', 'cupidLover2'], label: 'Bind Two Lovers for the Match', placeholders: ['Lover 1...', 'Lover 2...'], options: otherLiving.map(opt) });
   } else if (player.role === 'grumpy_grandma') {
+    const grandmaUsedNames = players.filter(p => game.grandmaUsedTargets.includes(p.id)).map(p => p.name);
+    if (grandmaUsedNames.length) {
+      fields.push({ type: 'info', text: `Already silenced: ${grandmaUsedNames.join(', ')}` });
+    }
     const eligible = otherLiving.filter(p => !game.grandmaUsedTargets.includes(p.id));
     if (eligible.length > 0) {
       fields.push({ type: 'select', id: 'grandmaSilenceSelect', label: 'Silence a Player for Tomorrow (each player can only be silenced once per game)', placeholder: 'Select player...', options: eligible.map(opt) });
@@ -564,6 +589,10 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
       passive = true;
     }
   } else if (player.role === 'red_lady') {
+    const redLadyUsedNames = players.filter(p => game.redLadyUsedTargets.includes(p.id)).map(p => p.name);
+    if (redLadyUsedNames.length) {
+      fields.push({ type: 'info', text: `Already visited: ${redLadyUsedNames.join(', ')}` });
+    }
     const eligible = otherLiving.filter(p => !game.redLadyUsedTargets.includes(p.id));
     if (eligible.length > 0) {
       fields.push({ type: 'select', id: 'redLadySelect', label: "Visit a Player's House Tonight (each player can only be visited once per game)", placeholder: 'Stay at home', options: eligible.map(opt) });
@@ -619,6 +648,8 @@ function applyInspect(game, players, player, inspectKind, targetId, targetId2) {
     if (!game.seenBySeer[player.id]) game.seenBySeer[player.id] = [];
     game.seenBySeer[player.id].push(targetId);
     const r = ROLES[tgt.role];
+    if (!game.seerNotebook[player.id]) game.seerNotebook[player.id] = [];
+    game.seerNotebook[player.id].push({ name: tgt.name, roleName: r.name, team: r.team });
     return { name: tgt.name, roleName: r.name, team: r.team, desc: r.desc };
   }
   if (inspectKind === 'wolfseer' || inspectKind === 'vigilante') {
@@ -642,12 +673,12 @@ function applyInspect(game, players, player, inspectKind, targetId, targetId2) {
     const t2 = players.find(p => p.id === targetId2);
     if (!t1 || !t2 || t1.id === t2.id) return null;
     const pairKey = [t1.id, t2.id].sort().join('|');
-    if (game.detectiveUsedPairs.includes(pairKey)) {
+    if (game.detectiveUsedPairs.some(p => p.key === pairKey)) {
       return { alreadyUsedPair: true, name1: t1.name, name2: t2.name };
     }
-    game.detectiveUsedPairs.push(pairKey);
     const team1 = ROLES[t1.role].team, team2 = ROLES[t2.role].team;
     const same = team1 === team2 && (team1 !== 'solo' || t1.role === t2.role);
+    game.detectiveUsedPairs.push({ key: pairKey, name1: t1.name, name2: t2.name, same });
     return { name1: t1.name, name2: t2.name, same };
   }
   return null;
