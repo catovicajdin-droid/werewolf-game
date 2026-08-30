@@ -47,6 +47,7 @@
             <p id="nightRoleDesc" class="muted" style="font-size:0.85rem; margin-top:0.25rem; line-height:1.4;"></p>
             <div id="nightExtra" style="margin-top:0.5rem; font-size:0.85rem; color:var(--neon-solo);"></div>
           </div>
+          <div id="nightDeadList" class="muted center" style="font-size:0.8rem; margin:0.4rem 0; display:none;"></div>
           <div id="nightMessage" class="center" style="margin: 0.5rem 0;"></div>
           <div id="nightFields" class="action-box"></div>
           <button id="nightSubmitBtn" class="purple big" style="margin-top:1rem; padding:0.9rem;">✅ Confirm Action</button>
@@ -564,6 +565,15 @@
       $('nightRoleBadge').textContent = `${msg.team.toUpperCase()} TEAM`;
       $('nightRoleTitle').textContent = msg.roleName;
       $('nightRoleDesc').textContent = msg.roleDesc;
+
+      const deadList = $('nightDeadList');
+      if (msg.deadNames && msg.deadNames.length) {
+        deadList.style.display = '';
+        deadList.textContent = `☠️ Already out: ${msg.deadNames.join(', ')}`;
+      } else {
+        deadList.style.display = 'none';
+        deadList.textContent = '';
+      }
 
       let extraHtml = '';
       if (msg.extra) {

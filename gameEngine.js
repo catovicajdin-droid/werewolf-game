@@ -377,9 +377,14 @@ function exclusiveActionFields(modeId, modeLabel, choices) {
 
 function buildNightPrompt(game, players, headhunterTargets, player) {
   const extra = buildExtraInfo(player, players, headhunterTargets, game);
+  // Names only, on purpose - every player sees who's already out before
+  // tonight's actions, but never their roles (that's for the death
+  // announcement/recap screens to reveal, per each role's own visibility
+  // rules, not this prompt).
+  const deadNames = players.filter(p => !p.alive).map(p => p.name);
 
   if (game.asleepId === player.id) {
-    return { passive: true, message: 'You were put to sleep by the Nightmare Werewolf! You cannot perform actions tonight.', extra, fields: [] };
+    return { passive: true, message: 'You were put to sleep by the Nightmare Werewolf! You cannot perform actions tonight.', extra, fields: [], deadNames };
   }
 
   const living = alivePlayers(players);
@@ -602,7 +607,7 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
     passive = true;
   }
 
-  return { passive, message, extra, fields };
+  return { passive, message, extra, fields, deadNames };
 }
 
 // ---- Inspect (Seer/Aura Seer/Detective/Wolf Seer/Sorcerer) ----
