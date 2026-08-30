@@ -70,6 +70,7 @@
         <h3>💬 Town Discussion</h3>
         <div id="daySilenceNote"></div>
         <div id="dayCancelNote"></div>
+        <div id="dayDeadList" class="muted center" style="font-size:0.8rem; margin:0.4rem 0; display:none;"></div>
         <div class="big center" id="dayTimerDisplay" style="color:var(--neon-solo); margin:1.25rem 0; font-size:2rem; font-weight:800; text-shadow:0 0 15px var(--neon-solo-glow);"></div>
         <p class="muted">Waiting for the Game Master to open voting...</p>
       </div>
@@ -78,6 +79,7 @@
     <div id="screen-vote" class="screen">
       <div class="card">
         <div class="center" style="margin-bottom:0.5rem;"><span class="muted">🗳️ Day Vote</span></div>
+        <div id="voteDeadList" class="muted center" style="font-size:0.8rem; margin-bottom:0.5rem; display:none;"></div>
         <div id="voteTallyPanel" class="muted" style="margin-bottom:0.75rem; font-size:0.85rem;"></div>
         <div id="voteContent"></div>
         <button id="voteSubmitBtn" class="danger big" style="margin-top:0.5rem; padding:0.9rem;">🗳️ Submit Vote</button>
@@ -682,6 +684,14 @@
 
     function renderDayBegin(msg) {
       $('daySilenceNote').innerHTML = msg.silencedName ? `<p style="color:var(--neon-solo);">🤐 <strong>${msg.silencedName}</strong> has been silenced by Grumpy Grandma!</p>` : '';
+      const dayDead = $('dayDeadList');
+      if (msg.deadNames && msg.deadNames.length) {
+        dayDead.style.display = '';
+        dayDead.textContent = `☠️ Already out: ${msg.deadNames.join(', ')}`;
+      } else {
+        dayDead.style.display = 'none';
+        dayDead.textContent = '';
+      }
       $('dayCancelNote').innerHTML = msg.votingCancelled
         ? (msg.cancelReason === 'pacifist'
           ? `<p style="color:var(--neon-safe); margin:0.5rem 0;">🕊️ Voting is cancelled today due to the Pacifist's ability.</p>`
@@ -705,6 +715,15 @@
 
     function renderVotePrompt(msg) {
       $('voteTallyPanel').innerHTML = '';
+
+      const voteDead = $('voteDeadList');
+      if (msg.deadNames && msg.deadNames.length) {
+        voteDead.style.display = '';
+        voteDead.textContent = `☠️ Already out: ${msg.deadNames.join(', ')}`;
+      } else {
+        voteDead.style.display = 'none';
+        voteDead.textContent = '';
+      }
 
       if (msg.silenced) {
         $('voteContent').innerHTML = `<div class="privacy-box"><p class="big">🤐 You are silenced today!</p><p class="muted">You cannot cast a vote this round.</p></div>`;

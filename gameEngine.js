@@ -1060,14 +1060,15 @@ function resolveNight(game, players, headhunterTargets) {
 // ---- Day vote (mirrors showDayVotePlayerTurn + resolveDayVotes) ----
 
 function buildVotePrompt(game, players, player) {
+  const deadNames = players.filter(p => !p.alive).map(p => p.name);
   if (game.silencedId === player.id) {
-    return { silenced: true, options: [] };
+    return { silenced: true, options: [], deadNames };
   }
   const living = alivePlayers(players);
   const eligible = living.filter(p => p.id !== player.id);
   const options = eligible.map(opt);
   if (game.settings.allowSkipVotes) options.push({ value: 'abstain', label: 'Abstain / Skip' });
-  return { silenced: false, options };
+  return { silenced: false, options, deadNames };
 }
 
 function applyVoteSubmission(game, players, player, targetId) {

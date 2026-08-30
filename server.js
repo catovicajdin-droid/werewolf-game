@@ -428,7 +428,8 @@ async function handleMessage(ws, msg) {
         round: room.game.round,
         silencedName: room.game.silencedId ? (room.players.get(room.game.silencedId) || {}).name || null : null,
         votingCancelled,
-        cancelReason: room.game.pacifistRevealTarget ? 'pacifist' : (room.game.votingDisabledThisRound ? 'vigilante' : null)
+        cancelReason: room.game.pacifistRevealTarget ? 'pacifist' : (room.game.votingDisabledThisRound ? 'vigilante' : null),
+        deadNames: Array.from(room.players.values()).filter(p => !p.alive).map(p => p.name)
       };
       room.dayDiscussionDeadline = room.game.settings.dayTimer > 0 ? Date.now() + room.game.settings.dayTimer * 1000 : null;
       const payload = buildDayBeginPayload(room);
