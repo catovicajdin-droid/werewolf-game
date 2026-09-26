@@ -591,7 +591,7 @@ function buildNightPrompt(game, players, headhunterTargets, player) {
     fields.push({ type: 'select', id: 'priestSelect', label: 'Throw Holy Water (Once per game)', placeholder: 'Skip for tonight', options: otherLiving.map(opt) });
   } else if (player.role === 'medium' && !player.usedOneTime) {
     if (deadPlayers.length > 0) {
-      fields.push({ type: 'select', id: 'mediumReviveSelect', label: 'Medium: Revive One Dead Player (Once per game)', placeholder: 'Do not revive anyone tonight', options: deadPlayers.map(p => ({ value: p.id, label: `${p.name} (${ROLES[p.role].name})` })) });
+      fields.push({ type: 'select', id: 'mediumReviveSelect', label: 'Medium: Revive One Dead Player (Once per game)', placeholder: 'Do not revive anyone tonight', options: deadPlayers.map(p => ({ value: p.id, label: p.name })) });
     } else {
       message = 'No dead players to revive currently.';
       passive = true;
