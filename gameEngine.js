@@ -38,13 +38,12 @@ function shuffle(arr) {
 }
 
 // Werewolves are a required antagonist - every game needs at least one, so
-// this caps at 1 per 3.5 players (same ratio as before) but randomizes
-// anywhere from 1 up to that cap (inclusive), instead of always landing
-// exactly on the cap. The cap itself is never allowed below 1, so even at
-// the smallest player counts the roll still has a valid [1, max] range.
-function randomWolfCount(total) {
-  const max = Math.max(1, Math.floor(total / 3.5));
-  return 1 + crypto.randomInt(max);
+// this is a fixed count at 1 per 3.5 players (not randomized - always
+// exactly the cap, e.g. 7 players -> always 2, 11 players -> always 3).
+// Only the specific wolf sub-roles filling slots beyond the first are
+// randomized, not the count itself.
+function wolfCountFor(total) {
+  return Math.max(1, Math.floor(total / 3.5));
 }
 
 // Solos are NOT a required antagonist - 0 is a fully valid outcome, not
@@ -135,7 +134,7 @@ function computeRoles(total, config) {
       throw new Error('Assigned roles exceed total players.');
     }
   } else if (assignmentMode === 'full_random') {
-    const wolfCount = randomWolfCount(total);
+    const wolfCount = wolfCountFor(total);
     roles.push('werewolf');
     const wolfKeys = Object.keys(ROLES).filter(k => ROLES[k].team === 'wolf' && k !== 'werewolf');
     shuffle(wolfKeys);
@@ -162,7 +161,7 @@ function computeRoles(total, config) {
     const enabledSolos = enabledKeys.filter(k => ROLES[k].team === 'solo');
     const enabledSpecial = enabledKeys.filter(k => ROLES[k].team !== 'wolf' && ROLES[k].team !== 'solo' && k !== 'villager');
 
-    const targetWolves = randomWolfCount(total);
+    const targetWolves = wolfCountFor(total);
     for (let i = 0; i < targetWolves; i++) {
       if (enabledWolves.length > 0) {
         roles.push(enabledWolves[Math.floor(Math.random() * enabledWolves.length)]);
